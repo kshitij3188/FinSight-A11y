@@ -377,16 +377,20 @@ function highlightElements(ids) {
     if (idx === 0) {
       el.scrollIntoView({ behavior: 'smooth', block: 'center' });
 
-      // Add floating label
+      // Add floating label positioned within the phone frame
       setTimeout(() => {
         const rect = el.getBoundingClientRect();
+        const frame = document.querySelector('.phone-frame');
+        const screen = document.querySelector('.phone-screen');
+        const frameRect = frame.getBoundingClientRect();
+        const scrollTop = screen ? screen.scrollTop : 0;
         const arrow = document.createElement('div');
         arrow.className = 'ai-arrow';
         arrow.textContent = '← Here';
-        arrow.style.top = `${rect.top + window.scrollY - 32}px`;
-        arrow.style.left = `${rect.right + 8}px`;
+        arrow.style.top = `${rect.top - frameRect.top + scrollTop - 32}px`;
+        arrow.style.left = `${rect.right - frameRect.left + 8}px`;
         arrow.id = 'ai-arrow-label';
-        document.body.appendChild(arrow);
+        frame.appendChild(arrow);
       }, 300);
     }
   });
@@ -567,45 +571,78 @@ window.speechSynthesis.onvoiceschanged = () => {};
 
 let recognition = null;
 let isRecording = false;
+let accumulatedTranscript = '';
 
 if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   recognition = new SR();
   recognition.lang = 'en-US';
-  recognition.continuous = false;
-  recognition.interimResults = false;
+  recognition.continuous = true;
+  recognition.interimResults = true;
 
   recognition.onresult = e => {
-    const transcript = e.results[0][0].transcript;
-    chatInput.value = transcript;
-    micBtn.classList.remove('recording');
-    isRecording = false;
-    micBtn.setAttribute('aria-label', 'Voice input');
-    sendMessage(transcript);
-    chatInput.value = '';
+    let interim = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const res = e.results[i];
+      if (res.isFinal) {
+        accumulatedTranscript += res[0].transcript;
+      } else {
+        interim += res[0].transcript;
+      }
+    }
+    // Mirror live text into input for user feedback — don't send yet
+    chatInput.value = (accumulatedTranscript + interim).trim();
   };
 
-  recognition.onerror = () => {
-    micBtn.classList.remove('recording');
-    isRecording = false;
+  recognition.onerror = e => {
+    // Log but don't touch UI state — stopRecording owns that
+    console.warn('SpeechRecognition error:', e.error);
   };
 
   recognition.onend = () => {
-    micBtn.classList.remove('recording');
-    isRecording = false;
+    // Chrome auto-terminates even continuous recognition after ~60s.
+    // If user is still holding, restart silently.
+    if (isRecording) {
+      try { recognition.start(); } catch (err) { /* already starting */ }
+    }
   };
 
-  micBtn.addEventListener('click', () => {
-    if (isRecording) {
-      recognition.stop();
-      return;
-    }
+  const startRecording = () => {
+    if (isRecording) return;
     window.speechSynthesis.cancel();
+    accumulatedTranscript = '';
+    chatInput.value = '';
     isRecording = true;
     micBtn.classList.add('recording');
-    micBtn.setAttribute('aria-label', 'Recording — tap to stop');
+    micBtn.setAttribute('aria-label', 'Recording — release to send');
     widgetPanel.classList.add('open');
-    recognition.start();
+    try {
+      recognition.start();
+    } catch (e) {
+      isRecording = false;
+      micBtn.classList.remove('recording');
+    }
+  };
+
+  const stopRecording = () => {
+    if (!isRecording) return;
+    isRecording = false;
+    micBtn.classList.remove('recording');
+    micBtn.setAttribute('aria-label', 'Voice input — press and hold to speak');
+    try { recognition.stop(); } catch (e) {}
+
+    const text = (accumulatedTranscript || chatInput.value).trim();
+    accumulatedTranscript = '';
+    if (text) {
+      chatInput.value = '';
+      sendMessage(text);
+    }
+  };
+
+  // Tap to toggle — first click starts, second click stops + sends
+  micBtn.addEventListener('click', () => {
+    if (isRecording) stopRecording();
+    else startRecording();
   });
 } else {
   micBtn.style.opacity = '0.4';

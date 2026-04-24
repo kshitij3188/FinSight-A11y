@@ -8,59 +8,65 @@
 </head>
 <body>
 
-<!-- Top Navigation -->
-<nav class="top-nav" role="navigation" aria-label="Main navigation">
-  <div class="nav-logo" aria-label="bunq">bunq</div>
-  <div class="nav-pills" role="tablist">
-    <button class="nav-pill active" data-page="home" data-element-id="nav-home" role="tab" aria-selected="true" tabindex="0">Home</button>
-    <button class="nav-pill" data-page="pay" data-element-id="nav-pay" role="tab" aria-selected="false" tabindex="0">Pay</button>
-    <button class="nav-pill" data-page="accounts" data-element-id="nav-accounts" role="tab" aria-selected="false" tabindex="0">Accounts</button>
-    <button class="nav-pill" data-page="cards" data-element-id="nav-cards" role="tab" aria-selected="false" tabindex="0">Cards</button>
-    <button class="nav-pill" data-page="savings" data-element-id="nav-savings" role="tab" aria-selected="false" tabindex="0">Savings</button>
-  </div>
-  <div class="nav-avatar" aria-label="Profile">A</div>
-</nav>
+<div class="phone-frame">
 
-<!-- Page Content (rendered by JS) -->
-<main id="page-content" role="main" aria-live="polite"></main>
+  <!-- Top Navigation — direct child of frame, no sticky needed -->
+  <nav class="top-nav" role="navigation" aria-label="Main navigation">
+    <div class="nav-logo" aria-label="bunq">bunq</div>
+    <div class="nav-pills" role="tablist">
+      <button class="nav-pill active" data-page="home" data-element-id="nav-home" role="tab" aria-selected="true" tabindex="0">Home</button>
+      <button class="nav-pill" data-page="pay" data-element-id="nav-pay" role="tab" aria-selected="false" tabindex="0">Pay</button>
+      <button class="nav-pill" data-page="accounts" data-element-id="nav-accounts" role="tab" aria-selected="false" tabindex="0">Accounts</button>
+      <button class="nav-pill" data-page="cards" data-element-id="nav-cards" role="tab" aria-selected="false" tabindex="0">Cards</button>
+      <button class="nav-pill" data-page="savings" data-element-id="nav-savings" role="tab" aria-selected="false" tabindex="0">Savings</button>
+    </div>
+    <div class="nav-avatar" aria-label="Profile">A</div>
+  </nav>
 
-<!-- AI Guide Widget -->
-<div id="ai-widget" aria-label="AI Guide assistant">
-  <div class="widget-fab" id="widget-toggle" role="button" aria-expanded="false" aria-label="Open AI Guide" tabindex="0">✦</div>
-  <div class="widget-panel" id="widget-panel" role="dialog" aria-label="AI Guide chat">
-    <div class="widget-header">
-      <div class="widget-header-dot"></div>
-      <div>
-        <div class="widget-header-title">Guide</div>
-        <div class="widget-header-sub">Your banking accessibility assistant</div>
+  <div class="phone-screen">
+    <!-- Page Content (rendered by JS) -->
+    <main id="page-content" role="main" aria-live="polite"></main>
+  </div><!-- /.phone-screen -->
+
+  <!-- AI Guide Widget -->
+  <div id="ai-widget" aria-label="AI Guide assistant">
+    <div class="widget-fab" id="widget-toggle" role="button" aria-expanded="false" aria-label="Open AI Guide" tabindex="0">✦</div>
+    <div class="widget-panel" id="widget-panel" role="dialog" aria-label="AI Guide chat">
+      <div class="widget-header">
+        <div class="widget-header-dot"></div>
+        <div>
+          <div class="widget-header-title">Guide</div>
+          <div class="widget-header-sub">Your banking accessibility assistant</div>
+        </div>
+      </div>
+
+      <div class="quick-prompts" id="quick-prompts" aria-label="Quick questions">
+        <button class="quick-prompt" data-q="How do I send money?">Send money</button>
+        <button class="quick-prompt" data-q="What is my IBAN?">My IBAN</button>
+        <button class="quick-prompt" data-q="How do I freeze my card?">Freeze card</button>
+        <button class="quick-prompt" data-q="How do I add to my savings?">Add savings</button>
+        <button class="quick-prompt receipt-prompt" id="scan-receipt-btn">📷 Scan receipt</button>
+      </div>
+
+      <!-- Hidden file input — accepts camera or file on mobile -->
+      <input type="file" id="receipt-input" accept="image/*" capture="environment"
+             style="display:none" aria-label="Upload receipt image">
+
+      <div class="widget-messages" id="widget-messages" role="log" aria-live="polite" aria-label="Conversation">
+        <div class="msg bot">
+          Hi! I'm Guide — tap any button on screen, or ask me anything. I'll show you exactly where to go. 👋
+        </div>
+      </div>
+
+      <div class="widget-input-area">
+        <button class="btn-icon mic" id="mic-btn" aria-label="Voice input — tap to start, tap again to send" title="Tap to start, tap again to send">🎤</button>
+        <input type="text" id="chat-input" placeholder="Ask me anything..." aria-label="Type your question" autocomplete="off">
+        <button class="btn-icon send" id="send-btn" aria-label="Send message">→</button>
       </div>
     </div>
-
-    <div class="quick-prompts" id="quick-prompts" aria-label="Quick questions">
-      <button class="quick-prompt" data-q="How do I send money?">Send money</button>
-      <button class="quick-prompt" data-q="What is my IBAN?">My IBAN</button>
-      <button class="quick-prompt" data-q="How do I freeze my card?">Freeze card</button>
-      <button class="quick-prompt" data-q="How do I add to my savings?">Add savings</button>
-      <button class="quick-prompt receipt-prompt" id="scan-receipt-btn">📷 Scan receipt</button>
-    </div>
-
-    <!-- Hidden file input — accepts camera or file on mobile -->
-    <input type="file" id="receipt-input" accept="image/*" capture="environment"
-           style="display:none" aria-label="Upload receipt image">
-
-    <div class="widget-messages" id="widget-messages" role="log" aria-live="polite" aria-label="Conversation">
-      <div class="msg bot">
-        Hi! I'm Guide — tap any button on screen, or ask me anything. I'll show you exactly where to go. 👋
-      </div>
-    </div>
-
-    <div class="widget-input-area">
-      <button class="btn-icon mic" id="mic-btn" aria-label="Voice input" title="Tap to speak">🎤</button>
-      <input type="text" id="chat-input" placeholder="Ask me anything..." aria-label="Type your question" autocomplete="off">
-      <button class="btn-icon send" id="send-btn" aria-label="Send message">→</button>
-    </div>
   </div>
-</div>
+
+</div><!-- /.phone-frame -->
 
 <script src="/static/app.js"></script>
 </body>

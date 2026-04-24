@@ -1,9 +1,24 @@
 import json
 import os
+from typing import Literal
+
 import anthropic
+from pydantic import BaseModel
+
 from rag.pipeline import retrieve
 
 client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
+
+
+class GuideResponse(BaseModel):
+    response: str
+    highlight_elements: list[str] = []
+    steps: list[str] = []
+    navigate_to: Literal["home", "pay", "accounts", "cards", "savings"] | None = None
+    speak: bool = True
+    not_found_contacts: list[str] = []
+    action: Literal["split_completed", "awaiting_contact_info"] | None = None
+
 
 SYSTEM_PROMPT = """\
 You are Guide — an AI accessibility assistant embedded in the bunq banking app.
@@ -12,11 +27,11 @@ Help users find features, answer policy questions, and take banking actions.
 Rules:
 - Simple, clear language. Short sentences. No jargon.
 - Only highlight elements that exist in the UI elements list.
-- Return ONLY valid JSON — no markdown fences, no text outside JSON.
+- Use the format_response tool to deliver every final answer.
 - Steps: max 4 items. Imperative verbs.
 - navigate_to: one of home/pay/accounts/cards/savings or null.
 - If no UI action needed, set highlight_elements to [].
-- SCOPE: Only answer questions about banking, payments, accounts, cards, savings, budgeting, bunq features, and financial topics. If the question is unrelated to banking or finance, set response to "I can only help with banking and bunq-related questions." and set highlight_elements to [], steps to [], navigate_to to null.
+- SCOPE: Only answer questions about banking, payments, accounts, cards, savings, budgeting, bunq features, and financial topics. If the question is unrelated to banking or finance, respond with "I can only help with banking and bunq-related questions." and set all other fields to empty/null.
 
 For split bill / contacts flow:
 - ALWAYS call get_contacts first to look up names before calling split_bill.
@@ -24,20 +39,6 @@ For split bill / contacts flow:
 - Offer user two options for missing contacts: provide email/phone OR skip them.
 - If user provides contact info in follow-up, call split_bill with that info directly.
 - Divide total amount equally unless user specifies otherwise.
-
-Response format:
-{
-  "response": "one or two plain-English sentences",
-  "highlight_elements": ["element-id"],
-  "steps": ["Step 1", "Step 2"],
-  "navigate_to": null,
-  "speak": true,
-  "not_found_contacts": [],
-  "action": null
-}
-
-action field: null | "split_completed" | "awaiting_contact_info"
-not_found_contacts: list of names Claude could not find in bunq contacts.
 """
 
 TOOLS = [
@@ -116,7 +117,52 @@ TOOLS = [
             "required": ["recipients", "description"],
         },
     },
+    {
+        "name": "format_response",
+        "description": "Always call this tool to deliver your final answer to the user. Call information-gathering tools first, then call this once to format the response.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "response": {
+                    "type": "string",
+                    "description": "1-2 plain English sentences answering the user's question",
+                },
+                "highlight_elements": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "UI element IDs to highlight on screen",
+                },
+                "steps": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Step-by-step instructions, max 4 items, imperative verbs",
+                },
+                "navigate_to": {
+                    "type": "string",
+                    "enum": ["home", "pay", "accounts", "cards", "savings"],
+                    "description": "Page to navigate to, or omit if no navigation needed",
+                },
+                "speak": {
+                    "type": "boolean",
+                    "description": "Whether to read the response aloud",
+                },
+                "not_found_contacts": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Names that could not be found in bunq contacts",
+                },
+                "action": {
+                    "type": "string",
+                    "enum": ["split_completed", "awaiting_contact_info"],
+                    "description": "Action status for split bill flow",
+                },
+            },
+            "required": ["response"],
+        },
+    },
 ]
+
+_FALLBACK = GuideResponse(response="Something went wrong. Please try again.")
 
 
 def _execute_tool(name: str, inputs: dict, api_key: str | None = None) -> str:
@@ -177,62 +223,67 @@ def guide(query: str, page_id: str, page_elements: dict, api_key: str | None = N
 
     messages = [{"role": "user", "content": user_message}]
 
-    # Tool-use loop — max 6 iterations (3 tool calls max)
-    for _ in range(6):
+    # Tool-use loop — max 8 iterations
+    for _ in range(8):
         response = client.messages.create(
             model="claude-sonnet-4-6",
             max_tokens=1024,
             system=[{
                 "type": "text",
                 "text": SYSTEM_PROMPT,
-                "cache_control": {"type": "ephemeral"},   # prompt caching
+                "cache_control": {"type": "ephemeral"},
             }],
             tools=TOOLS,
             messages=messages,
         )
 
-        if response.stop_reason == "end_turn":
-            # Extract final text response
-            raw = next(
-                (b.text for b in response.content if hasattr(b, "text")), ""
-            ).strip()
-            break
-
         if response.stop_reason == "tool_use":
-            # Execute all requested tools
             tool_results = []
             for block in response.content:
-                if block.type == "tool_use":
-                    result = _execute_tool(block.name, block.input, api_key)
-                    tool_results.append({
-                        "type": "tool_result",
-                        "tool_use_id": block.id,
-                        "content": result,
-                    })
+                if block.type != "tool_use":
+                    continue
+
+                # format_response is the final structured answer — return immediately
+                if block.name == "format_response":
+                    try:
+                        return GuideResponse(**block.input).model_dump()
+                    except Exception:
+                        return _FALLBACK.model_dump()
+
+                result = _execute_tool(block.name, block.input, api_key)
+                tool_results.append({
+                    "type": "tool_result",
+                    "tool_use_id": block.id,
+                    "content": result,
+                })
 
             messages.append({"role": "assistant", "content": response.content})
-            messages.append({"role": "user",      "content": tool_results})
+            messages.append({"role": "user", "content": tool_results})
             continue
+
+        # end_turn without format_response — force structured output
+        if response.stop_reason == "end_turn":
+            messages.append({"role": "assistant", "content": response.content})
+            forced = client.messages.create(
+                model="claude-sonnet-4-6",
+                max_tokens=512,
+                system=[{
+                    "type": "text",
+                    "text": SYSTEM_PROMPT,
+                    "cache_control": {"type": "ephemeral"},
+                }],
+                tools=TOOLS,
+                tool_choice={"type": "tool", "name": "format_response"},
+                messages=messages + [{"role": "user", "content": "Now call format_response with your answer."}],
+            )
+            for block in forced.content:
+                if block.type == "tool_use" and block.name == "format_response":
+                    try:
+                        return GuideResponse(**block.input).model_dump()
+                    except Exception:
+                        return _FALLBACK.model_dump()
+            break
 
         break  # unexpected stop reason
 
-    # Parse JSON response
-    try:
-        return json.loads(raw)
-    except (json.JSONDecodeError, UnboundLocalError):
-        start = raw.find("{") if 'raw' in dir() else -1
-        end   = raw.rfind("}") + 1
-        if start != -1 and end > start:
-            try:
-                return json.loads(raw[start:end])
-            except Exception:
-                pass
-        return {
-            "response": raw if 'raw' in dir() else "Something went wrong.",
-            "highlight_elements": [],
-            "steps": [],
-            "navigate_to": None,
-            "speak": True,
-            "not_found_contacts": [],
-            "action": None,
-        }
+    return _FALLBACK.model_dump()

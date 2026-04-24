@@ -1,8 +1,24 @@
-import os
 import json
+import os
+from typing import Literal
+
 import anthropic
+from pydantic import BaseModel
 
 client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
+
+
+class VisionResponse(BaseModel):
+    merchant: str = "Unknown"
+    amount: float = 0.0
+    currency: str = "EUR"
+    date: str | None = None
+    category: Literal["groceries", "food", "transport", "entertainment", "shopping", "health", "travel", "utilities", "other"] = "other"
+    items: list[str] = []
+    payment_method: Literal["cash", "card", "unknown"] = "unknown"
+    confidence: Literal["high", "medium", "low"] = "low"
+    summary: str = ""
+
 
 VISION_PROMPT = """\
 You are analysing a receipt or invoice image for a banking app.
@@ -27,6 +43,8 @@ Rules:
 - items: max 6 lines, skip if illegible
 - If image is not a receipt, set confidence to "low" and explain in summary
 """
+
+_FALLBACK = VisionResponse(summary="Could not parse receipt.")
 
 
 def analyse_receipt(image_base64: str, media_type: str = "image/jpeg") -> dict:
@@ -54,20 +72,15 @@ def analyse_receipt(image_base64: str, media_type: str = "image/jpeg") -> dict:
 
     raw = message.content[0].text.strip()
 
+    # Strip markdown fences if Claude wrapped the JSON
+    if raw.startswith("```"):
+        parts = raw.split("```")
+        raw = parts[1] if len(parts) > 1 else raw
+        if raw.startswith("json"):
+            raw = raw[4:]
+        raw = raw.strip()
+
     try:
-        return json.loads(raw)
-    except json.JSONDecodeError:
-        start, end = raw.find("{"), raw.rfind("}") + 1
-        if start != -1 and end > start:
-            return json.loads(raw[start:end])
-        return {
-            "merchant": "Unknown",
-            "amount": 0,
-            "currency": "EUR",
-            "date": None,
-            "category": "other",
-            "items": [],
-            "payment_method": "unknown",
-            "confidence": "low",
-            "summary": raw,
-        }
+        return VisionResponse(**json.loads(raw)).model_dump()
+    except Exception:
+        return _FALLBACK.model_dump()

@@ -1,0 +1,12 @@
+[
+  {"id": 1,  "name": "Alex Johnson",  "email": "alex.johnson@bunq-demo.com",  "password": "Alex123",   "user_id": 3628371, "account_id": 3620089, "api_key": "sandbox_6bd2adce5065284311edddb9e7c41420fa6e69d0e63ce03260c436dc"},
+  {"id": 2,  "name": "Sarah Chen",    "email": "sarah.chen@bunq-demo.com",    "password": "Sarah123",  "user_id": 3628372, "account_id": 3620090, "api_key": "sandbox_78019b8cfc35b4231cdc284efafb6472b3794cacea23fcaf217bcb31"},
+  {"id": 3,  "name": "Marco Rossi",   "email": "marco.rossi@bunq-demo.com",   "password": "Marco123",  "user_id": 3628373, "account_id": 3620091, "api_key": "sandbox_b23c485d9713d8f6c2947d024b2bba4ce952890ea2c7ea734afe14c6"},
+  {"id": 4,  "name": "Emma Müller",   "email": "emma.muller@bunq-demo.com",   "password": "Emma123",   "user_id": 3628374, "account_id": 3620092, "api_key": "sandbox_cf03aa27e25047f7fffbe2bd4da516d44ff955ff5b2c3c84a3fdbf3f"},
+  {"id": 5,  "name": "Lucas Silva",   "email": "lucas.silva@bunq-demo.com",   "password": "Lucas123",  "user_id": 3628375, "account_id": 3620093, "api_key": "sandbox_2a74fa651af487d8aefd2ccae78d203e3c8d766abea8cfd511f22f8f"},
+  {"id": 6,  "name": "Aisha Patel",   "email": "aisha.patel@bunq-demo.com",   "password": "Aisha123",  "user_id": 3628376, "account_id": 3620094, "api_key": "sandbox_8cd9888b5fcae136447965f17e99de7adb94be082f25e4c3aab46fc9"},
+  {"id": 7,  "name": "Tom Bakker",    "email": "tom.bakker@bunq-demo.com",    "password": "Tom123",    "user_id": 3628377, "account_id": 3620095, "api_key": "sandbox_326d7704a47c9802e7e57e8376dbba4a31770584126b454f59966424"},
+  {"id": 8,  "name": "Yuki Tanaka",   "email": "yuki.tanaka@bunq-demo.com",   "password": "Yuki123",  "user_id": 3628378, "account_id": 3620096, "api_key": "sandbox_5bdec7e8985b217048d24fc37cd8da7aef5a501b1642d95c8cfddf70"},
+  {"id": 9,  "name": "Sofia García",  "email": "sofia.garcia@bunq-demo.com",  "password": "Sofia123",  "user_id": 3628379, "account_id": 3620097, "api_key": "sandbox_581384c7afb6c228e4e7737377aed48d89e0430048f1d6483d0095be"},
+  {"id": 10, "name": "James O'Brien", "email": "james.obrien@bunq-demo.com",  "password": "James123",  "user_id": 3628380, "account_id": 3620098, "api_key": "sandbox_ba18190bff7368360f145e51c505f6b5f5a7086b018114863ccddf1c"}
+]

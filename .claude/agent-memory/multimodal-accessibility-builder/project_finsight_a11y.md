@@ -11,7 +11,7 @@ FinSight-A11y is a hackathon project: a bunq banking app accessibility layer wit
 - Vanilla JS SPA frontend (frontend/app.js, index.html, style.css, login.html)
 - Claude claude-sonnet-4-6 via Anthropic SDK for guide (tool-use loop) and vision (receipt OCR)
 - ChromaDB + BAAI/bge-base-en-v1.5 for RAG (rag/pipeline.py, rag/ingest.py)
-- bunq Sandbox API via hackathon_toolkit-main/bunq_client.py
+- bunq Sandbox API via hackathon_toolkit/bunq_client.py
 - Session auth via itsdangerous URLSafeSerializer (cookie "session")
 - Mock users in mock_users.json (10 accounts, password "Demo1234")
 

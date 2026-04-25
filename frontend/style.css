@@ -1265,6 +1265,21 @@ body.mode-dyslexic #chat-input {
 }
 body.mode-dyslexic .form-group input { font-size: 1rem; }
 
+/* ── Confetti ────────────────────────────────────────────────── */
+.confetti-piece {
+  position: absolute;
+  top: -10px;
+  z-index: 9999;
+  pointer-events: none;
+  animation: confetti-fall linear forwards;
+}
+
+@keyframes confetti-fall {
+  0%   { transform: translateY(0) rotate(0deg) scale(1); opacity: 1; }
+  80%  { opacity: 1; }
+  100% { transform: translateY(110vh) rotate(720deg) scale(0.5); opacity: 0; }
+}
+
 /* ── Colorblind mode ─────────────────────────────────────────── */
 /* Targets deuteranopia/protanopia (red-green) — most common type */
 

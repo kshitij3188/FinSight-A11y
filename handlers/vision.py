@@ -3,9 +3,11 @@ import os
 from typing import Literal
 
 import anthropic
+from langsmith import traceable
+from langsmith.wrappers import wrap_anthropic
 from pydantic import BaseModel
 
-client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
+client = wrap_anthropic(anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", "")))
 
 
 class VisionResponse(BaseModel):
@@ -47,6 +49,7 @@ Rules:
 _FALLBACK = VisionResponse(summary="Could not parse receipt.")
 
 
+@traceable(run_type="chain", name="analyse_receipt", metadata={"model": "claude-sonnet-4-6", "task": "receipt_ocr", "component": "vision"})
 def analyse_receipt(image_base64: str, media_type: str = "image/jpeg") -> dict:
     message = client.messages.create(
         model="claude-sonnet-4-6",

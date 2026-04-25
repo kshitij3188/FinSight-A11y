@@ -282,7 +282,7 @@ function renderPay() {
         <label for="input-desc">Description <span style="color:var(--text-muted)">(optional)</span></label>
         <input type="text" id="input-desc" placeholder="What's it for?" aria-label="Payment description">
       </div>
-      <button data-element-id="btn-pay-confirm" class="btn-primary" aria-label="Confirm and send payment">
+      <button data-element-id="btn-pay-confirm" class="btn-primary" aria-label="Confirm and send payment" onclick="submitPayment()">
         Send Payment
       </button>
       <button data-element-id="btn-pay-cancel" class="btn-secondary" onclick="navigateTo('home')" aria-label="Cancel and go back">
@@ -1182,6 +1182,76 @@ document.getElementById('btn-speech-off').addEventListener('click', () => {
   document.getElementById('btn-speech-on').classList.remove('active');
   document.getElementById('btn-speech-on').setAttribute('aria-pressed', false);
 });
+
+// ── Payment submission ────────────────────────────────────────
+
+async function submitPayment() {
+  const recipient = document.getElementById('input-recipient')?.value?.trim();
+  const amount    = parseFloat(document.getElementById('input-amount')?.value);
+  const desc      = document.getElementById('input-desc')?.value?.trim() || 'Payment via bunq Guide';
+
+  if (!recipient) { alert('Please enter a recipient.'); return; }
+  if (!amount || amount <= 0) { alert('Please enter a valid amount.'); return; }
+
+  const btn = document.querySelector('[data-element-id="btn-pay-confirm"]');
+  if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
+
+  try {
+    const resp = await fetch('/pay', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ recipient, amount, description: desc }),
+    });
+
+    if (!resp.ok) {
+      const err = await resp.json();
+      throw new Error(err.detail || 'Payment failed');
+    }
+
+    const data = await resp.json();
+
+    // Success — confetti + navigate home + refresh live data
+    triggerConfetti();
+    const msg = `Payment of €${parseFloat(data.amount).toFixed(2)} sent to ${data.recipient}! 🎉`;
+    speak(msg);
+    addMessage(msg, 'bot');
+    openWidget();
+
+    setTimeout(async () => {
+      await loadBunqData();   // refreshes accounts + transactions, re-renders current page
+      navigateTo('home');
+    }, 1800);
+
+  } catch (e) {
+    alert(`Payment failed: ${e.message}`);
+    if (btn) { btn.disabled = false; btn.textContent = 'Send Payment'; }
+  }
+}
+
+// ── Confetti easter egg ───────────────────────────────────────
+
+function triggerConfetti() {
+  const colors = ['#0A84FF', '#30D158', '#FFD60A', '#FF6B00', '#FF453A', '#BF5AF2', '#ffffff'];
+  const container = document.querySelector('.phone-frame') || document.body;
+  const rect = container.getBoundingClientRect();
+
+  for (let i = 0; i < 80; i++) {
+    const el = document.createElement('div');
+    el.className = 'confetti-piece';
+    el.style.cssText = `
+      left: ${Math.random() * 100}%;
+      background: ${colors[Math.floor(Math.random() * colors.length)]};
+      width: ${5 + Math.random() * 6}px;
+      height: ${8 + Math.random() * 6}px;
+      border-radius: ${Math.random() > 0.5 ? '50%' : '2px'};
+      animation-delay: ${Math.random() * 0.6}s;
+      animation-duration: ${1.2 + Math.random() * 1}s;
+      transform: rotate(${Math.random() * 360}deg);
+    `;
+    container.appendChild(el);
+    el.addEventListener('animationend', () => el.remove());
+  }
+}
 
 // ── Nav click handlers ────────────────────────────────────────
 

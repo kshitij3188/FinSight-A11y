@@ -82,14 +82,21 @@
 
   <!-- Bunqy Widget -->
   <div id="ai-widget" aria-label="Bunqy assistant">
+    <div class="widget-mini-bar" id="widget-mini-bar" role="button" tabindex="0" aria-label="Expand Bunqy">
+      <span class="widget-mini-icon">✦</span>
+      <span class="widget-mini-text" id="widget-mini-text"></span>
+    </div>
     <div class="widget-fab" id="widget-toggle" role="button" aria-expanded="false" aria-label="Open Bunqy" tabindex="0">✦</div>
     <div class="widget-panel" id="widget-panel" role="dialog" aria-label="Bunqy chat">
       <div class="widget-header">
         <div class="widget-header-dot"></div>
-        <div>
+        <div style="flex:1">
           <div class="widget-header-title">Bunqy</div>
           <div class="widget-header-sub">Your banking accessibility assistant</div>
         </div>
+        <button class="widget-close-btn" id="widget-close-btn" aria-label="Close Bunqy">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
       </div>
 
       <div class="quick-prompts" id="quick-prompts" aria-label="Example questions">

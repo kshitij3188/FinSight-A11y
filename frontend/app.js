@@ -460,7 +460,7 @@ function renderSavings() {
 
 function navigateTo(pageId) {
   if (!PAGES[pageId]) return;
-  clearHighlights();
+  if (_highlightQueue.length > 0) _clearHighlightVisuals(); else clearHighlights();
   currentPage = pageId;
 
   document.querySelectorAll('.nav-pill').forEach(btn => {
@@ -482,7 +482,7 @@ function navigateTo(pageId) {
   // Proactive guide for form pages when voice mode is on
   if (voiceMode && ['pay', 'savings'].includes(pageId)) {
     setTimeout(() => {
-      widgetPanel.classList.add('open');
+      openWidget();
       sendMessage('Guide me through this page');
     }, 500);
   }
@@ -491,45 +491,59 @@ function navigateTo(pageId) {
 // ── Highlight System (Lighthouse) ────────────────────────────
 
 function highlightElements(ids, narration, steps) {
+  console.log('[HL] highlightElements ids=', ids, 'steps=', steps);
   clearHighlights();
   if (!ids || ids.length === 0) return;
 
-  // Announce for screen readers (M2)
   const firstEl = document.querySelector(`[data-element-id="${ids[0]}"]`);
-  if (firstEl) {
-    announce(`Highlighted: ${firstEl.getAttribute('aria-label') || ids[0]}`);
-  }
+  if (firstEl) announce(`Highlighted: ${firstEl.getAttribute('aria-label') || ids[0]}`);
 
-  if (ids.length === 1) {
-    _lighthouseHighlight(ids[0], narration || '');
+  const narrations = (steps && steps.length) ? steps : ids.map(() => narration || '');
+  _highlightQueue = ids.map((id, i) => ({ id, narration: narrations[i] || '' }));
+  _highlightIndex = 0;
+
+  const total = _highlightQueue.length;
+  const firstNarration = _highlightQueue[0].narration;
+  const label = total > 1 ? `${firstNarration} (1/${total})` : firstNarration;
+
+  minimizeWidget(label || ids[0]);
+  _lighthouseHighlightStep(_highlightQueue[0].id, firstNarration);
+}
+
+function _advanceHighlight() {
+  console.log('[HL] _advanceHighlight called, index=', _highlightIndex, 'queue=', _highlightQueue.map(x=>x.id));
+  if (_highlightTimer) { clearTimeout(_highlightTimer); _highlightTimer = null; }
+  document.querySelectorAll('.lh-target').forEach(el => el.classList.remove('lh-target'));
+  document.getElementById('lh-overlay').classList.remove('active');
+  _hideMascot();
+  const arrow = document.getElementById('ai-arrow-label');
+  if (arrow) arrow.remove();
+
+  _highlightIndex++;
+  console.log('[HL] after increment, index=', _highlightIndex, 'queueLen=', _highlightQueue.length);
+  if (_highlightIndex < _highlightQueue.length) {
+    const { id, narration } = _highlightQueue[_highlightIndex];
+    const total = _highlightQueue.length;
+    const label = total > 1 ? `${narration} (${_highlightIndex + 1}/${total})` : narration;
+    document.getElementById('widget-mini-text').textContent = label || id;
+    _lighthouseHighlightStep(id, narration);
   } else {
-    const narrations = (steps && steps.length) ? steps : ids.map(() => narration || '');
-    _applyHighlightsSequential(ids.map((id, i) => ({ id, narration: narrations[i] || '' })));
+    _highlightQueue = [];
+    _highlightIndex = 0;
+    clearHighlights();
   }
 }
 
-async function _applyHighlightsSequential(highlights) {
-  for (let i = 0; i < highlights.length; i++) {
-    if (i > 0) await _sleep(1800);
-    _lighthouseHighlight(highlights[i].id, highlights[i].narration);
-  }
-}
-
-function _lighthouseHighlight(id, narration) {
+function _lighthouseHighlightStep(id, narration) {
   const el = document.querySelector(`[data-element-id="${id}"]`);
-  if (!el) return;
+  if (!el) { _advanceHighlight(); return; }
 
   el.scrollIntoView({ behavior: 'smooth', block: 'center' });
   el.classList.add('lh-target');
   document.getElementById('lh-overlay').classList.add('active');
   _moveMascot(el);
+  if (narration) speak(narration);
 
-  if (narration) {
-    _showNarration(narration);
-    speak(narration);
-  }
-
-  // Arrow label — fixed M5: removed double scrollTop
   setTimeout(() => {
     const rect = el.getBoundingClientRect();
     const frame = document.querySelector('.phone-frame');
@@ -543,11 +557,11 @@ function _lighthouseHighlight(id, narration) {
     frame.appendChild(arrow);
   }, 300);
 
-  el.addEventListener('click', () => clearHighlights(), { once: true });
-  setTimeout(clearHighlights, 8000);
+  el.addEventListener('click', () => _advanceHighlight(), { once: true });
+  _highlightTimer = setTimeout(_advanceHighlight, 15000);
 }
 
-function clearHighlights() {
+function _clearHighlightVisuals() {
   document.querySelectorAll('.lh-target, .ai-highlight').forEach(el => {
     el.classList.remove('lh-target', 'ai-highlight');
   });
@@ -556,6 +570,15 @@ function clearHighlights() {
   _hideNarration();
   const arrow = document.getElementById('ai-arrow-label');
   if (arrow) arrow.remove();
+}
+
+function clearHighlights() {
+  console.log('[HL] clearHighlights called from:', new Error().stack.split('\n')[2]);
+  if (_highlightTimer) { clearTimeout(_highlightTimer); _highlightTimer = null; }
+  _highlightQueue = [];
+  _highlightIndex = 0;
+  _clearHighlightVisuals();
+  restoreWidget();
 }
 
 function _moveMascot(targetEl) {
@@ -573,13 +596,15 @@ function _hideMascot() {
 }
 
 function _showNarration(text) {
-  const toast = document.getElementById('narration-toast');
-  if (toast) { toast.textContent = text; toast.classList.add('visible'); }
+  // disabled
+  // const toast = document.getElementById('narration-toast');
+  // if (toast) { toast.textContent = text; toast.classList.add('visible'); }
 }
 
 function _hideNarration() {
-  const toast = document.getElementById('narration-toast');
-  if (toast) toast.classList.remove('visible');
+  // disabled
+  // const toast = document.getElementById('narration-toast');
+  // if (toast) toast.classList.remove('visible');
 }
 
 function _sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
@@ -634,21 +659,64 @@ function getHistoryPayload() {
   ];
 }
 
-widgetToggle.addEventListener('click', () => {
-  const open = widgetPanel.classList.toggle('open');
-  widgetToggle.setAttribute('aria-expanded', open);
-  if (open) chatInput.focus();
-});
+const aiWidget = document.getElementById('ai-widget');
+let _widgetWasOpen = false;
+let _highlightQueue = [];
+let _highlightIndex = 0;
+let _highlightTimer = null;
 
-// Keyboard open
-widgetToggle.addEventListener('keydown', e => {
-  if (e.key === 'Enter' || e.key === ' ') widgetToggle.click();
+function openWidget() {
+  widgetPanel.classList.add('open');
+  widgetToggle.classList.add('hidden');
+  aiWidget.classList.add('widget-open');
+  widgetToggle.setAttribute('aria-expanded', true);
+  chatInput.focus();
+}
+
+function closeWidget() {
+  widgetPanel.classList.remove('open');
+  widgetToggle.classList.remove('hidden');
+  aiWidget.classList.remove('widget-open');
+  widgetToggle.setAttribute('aria-expanded', false);
+}
+
+function minimizeWidget(shortText) {
+  _widgetWasOpen = widgetPanel.classList.contains('open');
+  widgetPanel.classList.remove('open');
+  widgetToggle.classList.add('hidden');
+  aiWidget.classList.remove('widget-open');
+  aiWidget.classList.add('widget-minimized');
+  document.getElementById('widget-mini-text').textContent = shortText;
+}
+
+function restoreWidget() {
+  if (!aiWidget.classList.contains('widget-minimized')) return;
+  aiWidget.classList.remove('widget-minimized');
+  if (_widgetWasOpen) {
+    widgetPanel.classList.add('open');
+    aiWidget.classList.add('widget-open');
+    widgetToggle.classList.add('hidden');
+  } else {
+    widgetToggle.classList.remove('hidden');
+  }
+}
+
+widgetToggle.addEventListener('click', openWidget);
+widgetToggle.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') openWidget(); });
+document.getElementById('widget-close-btn').addEventListener('click', closeWidget);
+document.getElementById('widget-mini-bar').addEventListener('click', () => {
+  if (_highlightQueue.length > 0) _advanceHighlight(); else restoreWidget();
+});
+document.getElementById('widget-mini-bar').addEventListener('keydown', e => {
+  if (e.key === 'Enter' || e.key === ' ') {
+    if (_highlightQueue.length > 0) _advanceHighlight(); else restoreWidget();
+  }
 });
 
 // Quick prompts — fill input so user can edit placeholders before sending
 document.querySelectorAll('.quick-prompt').forEach(btn => {
   btn.addEventListener('click', () => {
-    widgetPanel.classList.add('open');
+    openWidget();
     chatInput.value = btn.dataset.q;
     chatInput.focus();
     chatInput.setSelectionRange(chatInput.value.length, chatInput.value.length);
@@ -933,7 +1001,7 @@ function startVoiceMode() {
   isListening = true;
   recognition.lang = currentLang === 'nl' ? 'nl-NL' : 'en-US';
   _setMicUI(true);
-  widgetPanel.classList.add('open');
+  openWidget();
   chatInput.value = '';
   try { recognition.start(); } catch (e) {
     voiceMode = false; isListening = false; _setMicUI(false);
@@ -1042,7 +1110,7 @@ function renderReceiptCard(data) {
 }
 
 attachBtnEl.addEventListener('click', () => {
-  widgetPanel.classList.add('open');
+  openWidget();
   receiptInput.click();
 });
 

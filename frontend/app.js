@@ -13,6 +13,7 @@ const bunqState = {
   accounts: [],
   transactions: [],
   primaryAccount: null,
+  userName: null,
 };
 
 // Mock fallbacks used when bunq API not configured
@@ -87,6 +88,10 @@ const PAGES = {
     title: 'Pay',
     render: renderPay,
   },
+  request: {
+    title: 'Request',
+    render: renderRequest,
+  },
   accounts: {
     title: 'Accounts',
     render: renderAccounts,
@@ -109,6 +114,83 @@ let isListening = false;   // mic is currently open (transient)
 
 // ── Page Renderers ────────────────────────────────────────────
 
+function generateChartData(currentBalance, transactions) {
+  const points = [];
+  const now = new Date();
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(now);
+    d.setDate(d.getDate() - i);
+    points.push({ date: new Date(d), balance: 0 });
+  }
+
+  if (transactions && transactions.length) {
+    // Build balance by working backwards from current balance
+    let running = currentBalance;
+    const sorted = [...transactions].sort((a, b) => new Date(b.created) - new Date(a.created));
+    for (let idx = 6; idx >= 0; idx--) {
+      const dayStart = new Date(points[idx].date);
+      dayStart.setHours(0, 0, 0, 0);
+      const dayEnd = new Date(dayStart);
+      dayEnd.setDate(dayEnd.getDate() + 1);
+      // Subtract transactions that happened after this day to get balance at start of day
+      sorted.forEach(tx => {
+        const txDate = new Date(tx.created);
+        if (txDate >= dayEnd) running -= (tx.amount || 0);
+      });
+      points[idx].balance = running;
+    }
+  } else {
+    // Deterministic mock relative to current balance
+    const rel = [0.65, 0.68, 0.72, 1.60, 1.55, 1.45, 1.0];
+    rel.forEach((r, i) => { points[i].balance = Math.round(currentBalance * r * 100) / 100; });
+  }
+  return points;
+}
+
+function renderBalanceChart(currentBalance, transactions) {
+  const data = generateChartData(currentBalance, transactions);
+  const W = 320, H = 100, padT = 10, padB = 24, padX = 8;
+  const innerW = W - padX * 2, innerH = H - padT - padB;
+  const balances = data.map(d => d.balance);
+  const minB = Math.min(...balances), maxB = Math.max(...balances);
+  const range = maxB - minB || 1;
+  const pts = data.map((d, i) => ({
+    x: padX + (i / 6) * innerW,
+    y: padT + (1 - (d.balance - minB) / range) * innerH,
+    date: d.date,
+  }));
+  const pathD = pts.reduce((acc, pt, i) => {
+    if (i === 0) return `M ${pt.x.toFixed(1)} ${pt.y.toFixed(1)}`;
+    const prev = pts[i - 1];
+    const cpx = (pt.x - prev.x) / 3;
+    return `${acc} C ${(prev.x + cpx).toFixed(1)} ${prev.y.toFixed(1)} ${(pt.x - cpx).toFixed(1)} ${pt.y.toFixed(1)} ${pt.x.toFixed(1)} ${pt.y.toFixed(1)}`;
+  }, '');
+  const areaD = `${pathD} L ${pts[6].x.toFixed(1)} ${H - padB} L ${pts[0].x.toFixed(1)} ${H - padB} Z`;
+  const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const labels = pts.map(pt =>
+    `<text x="${pt.x.toFixed(1)}" y="${H - 6}" text-anchor="middle" font-size="8" fill="#48484A">${days[pt.date.getDay()]}</text>`
+  ).join('');
+  return `
+    <div class="balance-chart-card">
+      <div class="chart-header">
+        <span class="chart-title">7-day balance</span>
+        <span class="chart-current">€${currentBalance.toFixed(2)}</span>
+      </div>
+      <svg viewBox="0 0 ${W} ${H}" class="balance-chart-svg" preserveAspectRatio="none">
+        <defs>
+          <linearGradient id="cg" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#0A84FF" stop-opacity="0.3"/>
+            <stop offset="100%" stop-color="#0A84FF" stop-opacity="0"/>
+          </linearGradient>
+        </defs>
+        <path d="${areaD}" fill="url(#cg)"/>
+        <path d="${pathD}" fill="none" stroke="#0A84FF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        ${labels}
+        <circle cx="${pts[6].x.toFixed(1)}" cy="${pts[6].y.toFixed(1)}" r="3.5" fill="#0A84FF"/>
+      </svg>
+    </div>`;
+}
+
 function renderHome() {
   const acc = bunqState.primaryAccount;
   const balance = acc ? `€${acc.balance.toFixed(2)}` : MOCK.balance;
@@ -116,6 +198,7 @@ function renderHome() {
   const txns = bunqState.transactions.length ? bunqState.transactions : MOCK.transactions;
 
   return `
+    ${bunqState.userName ? `<div class="account-holder-name">${bunqState.userName}</div>` : ''}
     <div data-element-id="balance-card" class="balance-card" role="region" aria-label="Account balance">
       <div class="balance-label">Total Balance ${bunqState.mock ? '' : '<span style="font-size:10px;opacity:0.6">● live</span>'}</div>
       <div class="balance-amount">${balance}</div>
@@ -124,39 +207,41 @@ function renderHome() {
     </div>
 
     <div class="quick-actions" role="group" aria-label="Quick actions">
-      <button data-element-id="btn-send-money" class="action-btn" onclick="navigateTo('pay')" aria-label="Send money">
-        <span class="action-icon" aria-hidden="true">↑</span>
+      <button data-element-id="btn-send-money" class="action-btn send" onclick="navigateTo('pay')" aria-label="Send money">
+        <span class="action-icon" aria-hidden="true">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5,12 12,5 19,12"/></svg>
+        </span>
         <span>Send</span>
       </button>
-      <button data-element-id="btn-request" class="action-btn" aria-label="Request money">
-        <span class="action-icon" aria-hidden="true">↓</span>
+      <button data-element-id="btn-request" class="action-btn receive" onclick="navigateTo('request')" aria-label="Request money">
+        <span class="action-icon" aria-hidden="true">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19,12 12,19 5,12"/></svg>
+        </span>
         <span>Request</span>
       </button>
-      <button data-element-id="btn-topup" class="action-btn" aria-label="Top up account">
-        <span class="action-icon" aria-hidden="true">＋</span>
-        <span>Top Up</span>
-      </button>
-      <button data-element-id="btn-savings" class="action-btn" onclick="navigateTo('savings')" aria-label="View savings">
-        <span class="action-icon" aria-hidden="true">🎯</span>
-        <span>Savings</span>
+      <button data-element-id="btn-topup" class="action-btn add" onclick="navigateTo('savings')" aria-label="Add to savings">
+        <span class="action-icon" aria-hidden="true">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </span>
+        <span>Add</span>
       </button>
     </div>
 
-    <div class="section-header">
-      Recent Transactions
-      <a href="#" aria-label="See all transactions">See all</a>
-    </div>
+    ${renderBalanceChart(bunqState.primaryAccount?.balance ?? 1247.50, bunqState.transactions)}
 
-    <div data-element-id="transaction-list" class="transaction-list" role="list" aria-label="Recent transactions">
-      ${txns.slice(0, 8).map((tx, i) => `
-      <div data-element-id="txn-${i+1}" class="transaction-item" role="listitem">
-        <div class="txn-icon ${tx.cat}" aria-hidden="true">${tx.icon}</div>
-        <div class="txn-details">
-          <div class="txn-name">${tx.counterpart}</div>
-          <div class="txn-category">${tx.cat.charAt(0).toUpperCase()+tx.cat.slice(1)} • ${tx.created}</div>
-        </div>
-        <div class="txn-amount ${tx.amount >= 0 ? 'positive' : 'negative'}">${fmt(tx.amount)}</div>
-      </div>`).join('')}
+    <div class="txn-scroll-container">
+      <div class="section-header" style="margin-top:4px">Recent transactions</div>
+      <div data-element-id="recent-transactions" role="list" aria-label="Recent transactions">
+        ${txns.map(tx => `
+          <div class="transaction-item" role="listitem" tabindex="0" aria-label="${tx.counterpart}, ${fmt(tx.amount, tx.currency)}">
+            <div class="txn-icon ${tx.cat}">${tx.icon}</div>
+            <div class="txn-details">
+              <div class="txn-name">${tx.counterpart}</div>
+              <div class="txn-date">${tx.created}</div>
+            </div>
+            <div class="txn-amount ${tx.amount < 0 ? 'negative' : 'positive'}">${fmt(tx.amount, tx.currency)}</div>
+          </div>`).join('')}
+      </div>
     </div>`;
 }
 
@@ -200,6 +285,34 @@ function renderPay() {
         Send Payment
       </button>
       <button data-element-id="btn-pay-cancel" class="btn-secondary" onclick="navigateTo('home')" aria-label="Cancel and go back">
+        Cancel
+      </button>
+    </div>`;
+}
+
+function renderRequest() {
+  return `
+    <div class="section-header">Request Money</div>
+    <div class="card pay-form">
+      <div data-element-id="field-req-from" class="form-group">
+        <label for="input-req-from">From (name or IBAN)</label>
+        <input type="text" id="input-req-from" placeholder="e.g. John or NL12 BUNQ..." aria-label="Request from name or IBAN">
+      </div>
+      <div data-element-id="field-req-amount" class="form-group">
+        <label for="input-req-amount">Amount</label>
+        <div class="amount-input-wrap">
+          <span class="amount-currency" aria-hidden="true">€</span>
+          <input type="number" id="input-req-amount" placeholder="0.00" aria-label="Amount to request in euros" min="0.01" step="0.01">
+        </div>
+      </div>
+      <div data-element-id="field-req-desc" class="form-group">
+        <label for="input-req-desc">Description <span style="color:var(--text-muted)">(optional)</span></label>
+        <input type="text" id="input-req-desc" placeholder="What's it for?" aria-label="Request description">
+      </div>
+      <button data-element-id="btn-req-confirm" class="btn-primary" aria-label="Send payment request">
+        Send Request
+      </button>
+      <button data-element-id="btn-req-cancel" class="btn-secondary" onclick="navigateTo('home')" aria-label="Cancel and go back">
         Cancel
       </button>
     </div>`;
@@ -589,7 +702,7 @@ function addMessage(text, role, steps) {
 }
 
 function showTyping() {
-  const msg = addMessage('Guide is thinking…', 'typing');
+  const msg = addMessage('Bunqy is thinking…', 'typing');
   return msg;
 }
 
@@ -1077,6 +1190,22 @@ function fileToBase64(file) {
   });
 }
 
+// ── Ripple click effect ───────────────────────────────────────
+
+document.addEventListener('pointerdown', e => {
+  const target = e.target.closest('button, .nav-pill, .action-btn, .contact-chip');
+  if (!target) return;
+  const r = document.createElement('span');
+  r.className = 'ripple';
+  const rect = target.getBoundingClientRect();
+  const size = Math.max(rect.width, rect.height);
+  r.style.cssText = `width:${size}px;height:${size}px;left:${e.clientX - rect.left - size / 2}px;top:${e.clientY - rect.top - size / 2}px`;
+  target.style.position = target.style.position || 'relative';
+  target.style.overflow = 'hidden';
+  target.appendChild(r);
+  r.addEventListener('animationend', () => r.remove());
+});
+
 // ── Init ──────────────────────────────────────────────────────
 
 async function init() {
@@ -1088,20 +1217,11 @@ async function init() {
       return;
     }
     const user = await res.json();
-    // Show user initial + name in nav avatar
+    bunqState.userName = user.name;
     const avatar = document.querySelector('.nav-avatar');
     if (avatar) {
       avatar.textContent = user.name.charAt(0);
       avatar.title = user.name;
-    }
-    // Add logout link
-    const nav = document.querySelector('.top-nav');
-    if (nav) {
-      const logoutBtn = document.createElement('a');
-      logoutBtn.href = '/auth/logout';
-      logoutBtn.style.cssText = 'font-size:12px;color:#6b7280;text-decoration:none;padding:4px 8px;border-radius:8px;border:1px solid #e5e7eb';
-      logoutBtn.textContent = 'Sign out';
-      nav.appendChild(logoutBtn);
     }
   } catch (e) {
     window.location.href = '/login';
@@ -1114,6 +1234,36 @@ async function init() {
   });
   document.querySelectorAll('.lang-btn').forEach(btn => {
     btn.addEventListener('click', () => setLang(btn.dataset.lang));
+  });
+
+  // Profile dropdown
+  const profileBtn   = document.getElementById('nav-profile-btn');
+  const profileDrop  = document.getElementById('profile-dropdown');
+  const a11yBtn      = document.getElementById('nav-a11y-btn');
+  const a11yDrop     = document.getElementById('a11y-dropdown');
+
+  function toggleDropdown(btn, drop, other, otherBtn) {
+    const open = !drop.hidden;
+    drop.hidden = open;
+    btn.setAttribute('aria-expanded', !open);
+    if (!open) { other.hidden = true; otherBtn.setAttribute('aria-expanded', false); }
+  }
+
+  profileBtn.addEventListener('click', e => {
+    e.stopPropagation();
+    toggleDropdown(profileBtn, profileDrop, a11yDrop, a11yBtn);
+  });
+  a11yBtn.addEventListener('click', e => {
+    e.stopPropagation();
+    toggleDropdown(a11yBtn, a11yDrop, profileDrop, profileBtn);
+  });
+
+  // Close on outside click
+  document.addEventListener('click', () => {
+    profileDrop.hidden = true;
+    a11yDrop.hidden = true;
+    profileBtn.setAttribute('aria-expanded', false);
+    a11yBtn.setAttribute('aria-expanded', false);
   });
 
   navigateTo('home');

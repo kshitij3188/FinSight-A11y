@@ -10,6 +10,12 @@ from rag.pipeline import retrieve
 client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
 
 
+class UIAction(BaseModel):
+    type: Literal["click", "fill", "focus"]
+    element_id: str
+    value: str | None = None
+
+
 class GuideResponse(BaseModel):
     response: str
     highlight_elements: list[str] = []
@@ -18,27 +24,43 @@ class GuideResponse(BaseModel):
     speak: bool = True
     not_found_contacts: list[str] = []
     action: Literal["split_completed", "awaiting_contact_info"] | None = None
+    actions: list[UIAction] = []
 
 
 SYSTEM_PROMPT = """\
-You are Guide — an AI accessibility assistant embedded in the bunq banking app.
-Help users find features, answer policy questions, and take banking actions.
+You are Guide — a warm, proactive AI accessibility assistant built into the bunq banking app.
+Your users often have visual impairments. Help them complete banking tasks end-to-end, not just answer questions.
 
-Rules:
-- Simple, clear language. Short sentences. No jargon.
-- Only highlight elements that exist in the UI elements list.
-- Use the format_response tool to deliver every final answer.
-- Steps: max 4 items. Imperative verbs.
-- navigate_to: one of home/pay/accounts/cards/savings or null.
-- If no UI action needed, set highlight_elements to [].
-- SCOPE: Only answer questions about banking, payments, accounts, cards, savings, budgeting, bunq features, and financial topics. If the question is unrelated to banking or finance, respond with "I can only help with banking and bunq-related questions." and set all other fields to empty/null.
+PERSONALITY
+- Friendly and encouraging, like a knowledgeable friend — not a help-desk bot.
+- Never copy-paste documentation verbatim. Speak in plain, natural sentences.
+- Acknowledge what the user has already done: "Great, you've entered Sara! Now let's set the amount."
+- If the user is stuck, offer to do the next step for them.
 
-For split bill / contacts flow:
-- ALWAYS call get_contacts first to look up names before calling split_bill.
-- If some names not found in contacts: include them in not_found_contacts list.
-- Offer user two options for missing contacts: provide email/phone OR skip them.
-- If user provides contact info in follow-up, call split_bill with that info directly.
-- Divide total amount equally unless user specifies otherwise.
+ACTIONS (use freely)
+You can perform UI actions on behalf of the user via the `actions` field in format_response:
+- type "click"  → taps a button or element
+- type "fill"   → types a value into a form field (include `value`)
+- type "focus"  → moves keyboard focus to an element
+Only reference element_ids from the Available UI elements list.
+Always include filled/clicked elements in highlight_elements so the user can see what changed.
+Confirm with the user before executing irreversible actions (payment submission).
+
+PAGE STATE
+If "Current field values" is shown, the user has already filled those fields.
+Acknowledge their progress and suggest the next logical step.
+
+SCOPE
+Only answer banking/finance/bunq topics. For off-topic questions:
+"I can only help with banking and bunq-related topics."
+
+FORMAT
+- Always call format_response as your final tool call.
+- steps: max 4 items, imperative verbs, short sentences.
+- navigate_to: use when the user needs to switch pages.
+- For split bill: call get_contacts first to resolve names, then split_bill.
+- Divide bill equally unless user specifies otherwise.
+- If contacts not found: include in not_found_contacts and offer email/phone fallback.
 """
 
 TOOLS = [
@@ -156,6 +178,19 @@ TOOLS = [
                     "enum": ["split_completed", "awaiting_contact_info"],
                     "description": "Action status for split bill flow",
                 },
+                "actions": {
+                    "type": "array",
+                    "description": "UI actions to perform on behalf of the user: click a button, fill a field, or focus an element. Executed sequentially with visual highlights.",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "type":       {"type": "string", "enum": ["click", "fill", "focus"]},
+                            "element_id": {"type": "string", "description": "data-element-id of the target element"},
+                            "value":      {"type": "string", "description": "Text or number to fill (for fill type only)"},
+                        },
+                        "required": ["type", "element_id"],
+                    },
+                },
             },
             "required": ["response"],
         },
@@ -212,12 +247,19 @@ def _execute_tool(name: str, inputs: dict, api_key: str | None = None) -> str:
     return json.dumps({"error": f"unknown tool: {name}"})
 
 
-def guide(query: str, page_id: str, page_elements: dict, api_key: str | None = None) -> dict:
+def guide(query: str, page_id: str, page_elements: dict, api_key: str | None = None, page_state: dict | None = None) -> dict:
     elements_str = "\n".join(f"  {k}: {v}" for k, v in page_elements.items())
+
+    state_str = ""
+    if page_state:
+        filled = {k: v for k, v in page_state.items() if v}
+        if filled:
+            state_str = "\n\nCurrent field values:\n" + "\n".join(f"  {k}: {v}" for k, v in filled.items())
 
     user_message = (
         f"Current page: {page_id}\n\n"
-        f"Available UI elements:\n{elements_str}\n\n"
+        f"Available UI elements:\n{elements_str}"
+        f"{state_str}\n\n"
         f"User question: {query}"
     )
 

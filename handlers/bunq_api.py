@@ -144,6 +144,61 @@ def split_bill(
     }
 
 
+def make_payment(
+    api_key: str,
+    account_id: int,
+    recipient: str,
+    amount: float,
+    description: str = "Payment via bunq Guide",
+    currency: str = "EUR",
+) -> dict:
+    client = _get_client(api_key)
+    amount_str = f"{float(amount):.2f}"
+
+    # Resolve recipient → pointer type
+    r = recipient.strip()
+    if "@" in r:
+        pointer = {"type": "EMAIL", "value": r, "name": r}
+    elif len(r) >= 15 and r[:2].isalpha() and r[2:4].isdigit():
+        # Looks like an IBAN (e.g. NL21ABNA...)
+        iban_clean = r.replace(" ", "").upper()
+        pointer = {"type": "IBAN", "value": iban_clean, "name": "Recipient"}
+    elif r.startswith("+") or (r.replace(" ", "").isdigit() and len(r) >= 8):
+        pointer = {"type": "PHONE_NUMBER", "value": r, "name": r}
+    else:
+        # Try to resolve name via payment history
+        contacts = get_contacts(api_key, account_id, search_names=[r])
+        found = contacts.get("found", [])
+        if not found:
+            raise ValueError(f"Could not resolve '{r}' — provide an IBAN, email, or phone number.")
+        c = found[0]
+        if c.get("iban"):
+            pointer = {"type": "IBAN",         "value": c["iban"],  "name": c["display_name"]}
+        elif c.get("email"):
+            pointer = {"type": "EMAIL",        "value": c["email"], "name": c["display_name"]}
+        elif c.get("phone"):
+            pointer = {"type": "PHONE_NUMBER", "value": c["phone"], "name": c["display_name"]}
+        else:
+            raise ValueError(f"No contact info found for '{r}'.")
+
+    resp = client.post(
+        f"user/{client.user_id}/monetary-account/{account_id}/payment",
+        {
+            "amount": {"value": amount_str, "currency": currency},
+            "counterparty_alias": pointer,
+            "description": description,
+        },
+    )
+    payment_id = resp[0]["Id"]["id"]
+    return {
+        "payment_id": payment_id,
+        "amount": amount_str,
+        "currency": currency,
+        "recipient": pointer.get("name") or recipient,
+        "description": description,
+    }
+
+
 def create_payment_link(
     api_key: str,
     account_id: int,

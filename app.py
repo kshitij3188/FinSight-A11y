@@ -105,6 +105,13 @@ class VisionRequest(BaseModel):
     media_type: str = "image/jpeg"
 
 
+class PaymentRequest(BaseModel):
+    recipient: str
+    amount: float
+    description: str = "Payment via bunq Guide"
+    currency: str = "EUR"
+
+
 # ── Auth routes ───────────────────────────────────────────────
 
 @app.get("/login", response_class=HTMLResponse)
@@ -180,6 +187,32 @@ async def vision_endpoint(req: VisionRequest, request: Request):
     try:
         from handlers.vision import analyse_receipt
         return analyse_receipt(req.image_base64, req.media_type)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/pay")
+async def pay_endpoint(req: PaymentRequest, request: Request):
+    user = _get_session_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not logged in")
+    try:
+        from handlers.bunq_api import make_payment, get_accounts
+        accounts = get_accounts(user["api_key"])
+        if not accounts:
+            raise HTTPException(status_code=400, detail="No active account found")
+        account_id = accounts[0]["id"]
+        result = make_payment(
+            api_key=user["api_key"],
+            account_id=account_id,
+            recipient=req.recipient,
+            amount=req.amount,
+            description=req.description,
+            currency=req.currency,
+        )
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

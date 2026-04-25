@@ -1079,7 +1079,7 @@ button:focus-visible, input:focus-visible, [tabindex]:focus-visible {
   flex-wrap: wrap;
 }
 
-.mode-btn, .lang-btn {
+.mode-btn, .lang-btn, .speech-btn {
   background: transparent;
   border: 1px solid rgba(255,255,255,0.2);
   color: rgba(255,255,255,0.65);
@@ -1090,8 +1090,8 @@ button:focus-visible, input:focus-visible, [tabindex]:focus-visible {
   cursor: pointer;
   transition: all 0.2s;
 }
-.mode-btn:hover, .lang-btn:hover { background: rgba(255,255,255,0.1); }
-.mode-btn.active, .lang-btn.active {
+.mode-btn:hover, .lang-btn:hover, .speech-btn:hover { background: rgba(255,255,255,0.1); }
+.mode-btn.active, .lang-btn.active, .speech-btn.active {
   background: var(--bunq-green);
   border-color: var(--bunq-green);
   color: var(--bunq-navy);
@@ -1202,12 +1202,128 @@ body.mode-low_vision .btn-primary, body.mode-low_vision .btn-secondary { padding
 body.mode-dyslexic {
   font-family: 'OpenDyslexic', -apple-system, sans-serif !important;
   letter-spacing: 0.05em;
-  word-spacing: 0.15em;
+  word-spacing: 0.18em;
   line-height: 1.8;
 }
-body.mode-dyslexic #chat-input,
-body.mode-dyslexic .msg { font-size: 1rem; }
+
+/* ── Dyslexic: chatbot messages ─────────────────────────────── */
+
+/* More breathing room between messages */
+body.mode-dyslexic .widget-messages {
+  gap: 18px;
+  padding: 18px 16px;
+}
+
+/* Base message — larger, more spaced, avoid pure-white/black contrast */
+body.mode-dyslexic .msg {
+  font-size: 1rem;
+  line-height: 1.65;
+  padding: 14px 18px;
+  max-width: 92%;
+  letter-spacing: 0.03em;
+  word-spacing: 0.12em;
+}
+
+/* Bot messages — warm cream-tinted dark background, soft off-white text */
+body.mode-dyslexic .msg.bot {
+  background: #2D2A42;
+  color: #EAE6D9;
+  border-left: 3px solid rgba(255, 215, 100, 0.35);
+  border-bottom-left-radius: 4px;
+}
+
+/* User messages — muted navy, warm off-white text */
+body.mode-dyslexic .msg.user {
+  background: #1B3A5C;
+  color: #EDE9DF;
+}
+
+/* Steps — more gap, softer color, warmer step numbers */
+body.mode-dyslexic .msg-steps {
+  gap: 12px;
+  margin-top: 14px;
+}
+body.mode-dyslexic .msg-step {
+  font-size: 0.9rem;
+  line-height: 1.65;
+  gap: 10px;
+}
+body.mode-dyslexic .step-num {
+  background: #D4A017;
+  color: #1C1F3B;
+  width: 22px;
+  height: 22px;
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+/* Input area — match warm tone */
+body.mode-dyslexic #chat-input {
+  font-size: 1rem;
+  line-height: 1.55;
+  letter-spacing: 0.03em;
+}
 body.mode-dyslexic .form-group input { font-size: 1rem; }
+
+/* ── Colorblind mode ─────────────────────────────────────────── */
+/* Targets deuteranopia/protanopia (red-green) — most common type */
+
+/* Positive transaction amounts: green → blue + prepend "+" so not color-only */
+body.mode-colorblind .txn-amount.positive {
+  color: #4DA6FF;
+}
+body.mode-colorblind .txn-amount.positive::before {
+  content: '+';
+  font-size: 0.85em;
+  margin-right: 1px;
+}
+
+/* Balance change trend: green → blue */
+body.mode-colorblind .balance-change {
+  color: #4DA6FF;
+}
+
+/* Action icons: savings green → amber (distinct from blue send/request) */
+body.mode-colorblind .action-btn.savings .action-icon {
+  background: #FF8C00;
+}
+
+/* Quick prompt green → blue tint (green/orange pair broken) */
+body.mode-colorblind .qp-green {
+  background: rgba(10,132,255,0.12);
+  border-color: rgba(10,132,255,0.3);
+  color: #60AAFF;
+}
+body.mode-colorblind .qp-green:hover {
+  background: rgba(10,132,255,0.22);
+}
+
+/* Mic recording: red → amber (red invisible to protanopes; icon still present) */
+body.mode-colorblind .btn-icon.mic.recording {
+  color: #FF8C00;
+  background: rgba(255,140,0,0.15);
+}
+
+/* Interest rate: green-dark → blue */
+body.mode-colorblind .interest-rate {
+  color: #4DA6FF;
+}
+
+/* Step numbers in chat: green → blue */
+body.mode-colorblind .step-num {
+  background: #4DA6FF;
+  color: #000;
+}
+
+/* Chat widget send button + active modes: green → blue (already blue, explicit override) */
+body.mode-colorblind .mode-btn.active,
+body.mode-colorblind .speech-btn.active {
+  background: #4DA6FF;
+  border-color: #4DA6FF;
+  color: #000;
+}
+
+/* Highlight orchestrator outline: gold (#FFD700) stays — fine for colorblind */
 
 /* ── Responsive layout ── */
 @media (min-height: 845px) {

@@ -3,8 +3,8 @@ import os
 from pathlib import Path
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Request, Form
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
+from fastapi import FastAPI, HTTPException, Request, Form, UploadFile, File
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from itsdangerous import URLSafeSerializer, BadSignature
 from pydantic import BaseModel
@@ -48,8 +48,7 @@ PAGE_ELEMENTS: dict[str, dict[str, str]] = {
         "btn-send-money": "Send Money button — tap to send money to someone",
         "btn-request": "Request Money button — tap to request payment from someone",
         "btn-topup": "Top Up button — tap to add money to your account",
-        "btn-savings": "Savings button — tap to view or manage savings",
-        "transaction-list": "Recent transactions list showing last payments",
+        "recent-transactions": "Recent transactions list showing last payments",
         "nav-pay": "Pay tab in navigation bar",
         "nav-accounts": "Accounts tab in navigation bar",
         "nav-cards": "Cards tab in navigation bar",
@@ -181,6 +180,39 @@ async def vision_endpoint(req: VisionRequest, request: Request):
     try:
         from handlers.vision import analyse_receipt
         return analyse_receipt(req.image_base64, req.media_type)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/stt")
+async def stt_endpoint(request: Request, audio: UploadFile = File(...)):
+    user = _get_session_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not logged in")
+    if not os.environ.get("GROQ_API_KEY"):
+        raise HTTPException(status_code=500, detail="GROQ_API_KEY not set")
+    try:
+        from handlers.stt import transcribe
+        data = await audio.read()
+        text = transcribe(data, audio.filename or "audio.webm")
+        return {"text": text}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class TTSRequest(BaseModel):
+    text: str
+
+
+@app.post("/tts")
+async def tts_endpoint(req: TTSRequest, request: Request):
+    user = _get_session_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not logged in")
+    try:
+        from handlers.tts import synthesize
+        audio = await synthesize(req.text)
+        return Response(content=audio, media_type="audio/mpeg")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

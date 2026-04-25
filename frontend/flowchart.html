@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -11,23 +12,37 @@
             color: white;
             display: flex;
             justify-content: center;
-            align-items: center;
-            height: 100vh;
+            align-items: flex-start;
+            min-height: 100vh;
             margin: 0;
+            padding: 4rem;
             font-family: sans-serif;
+            overflow: auto;
         }
+
         .mermaid {
             background-color: #1a192b;
             padding: 2rem;
             border-radius: 8px;
+            width: 100%;
+            display: flex;
+            justify-content: center;
+        }
+
+        /* Force the SVG to be significantly larger */
+        .mermaid svg {
+            min-width: 1000px !important;
+            height: auto;
         }
     </style>
 </head>
+
 <body>
 
     <div class="mermaid">
-    %%{init: {'theme': 'base', 'themeVariables': { 'darkMode': true, 'background': '#1a192b', 'primaryTextColor': '#ffffff', 'lineColor': '#8a8eac', 'edgeLabelBackground': '#1a192b'}}}%%
-    flowchart TD
+        %%{init: {'theme': 'base', 'themeVariables': { 'darkMode': true, 'background': '#1a192b', 'primaryTextColor':
+        '#ffffff', 'lineColor': '#8a8eac', 'edgeLabelBackground': '#1a192b'}}}%%
+        flowchart TD
         %% Shapes and colors (aesthetic matching)
         classDef startEnd fill:#393c6f,stroke:none,color:#fff
         classDef process fill:#2d2931,stroke:#c4714b,stroke-width:2px,color:#fff,rx:4px,ry:4px
@@ -38,7 +53,7 @@
         classDef dashed fill:none,stroke:#4a4282,stroke-width:2px,stroke-dasharray: 5 5,color:#fff
         classDef yesNode fill:#10b981,stroke:none,color:#fff,rx:4px,ry:4px
         classDef noNode fill:#ef4444,stroke:none,color:#fff,rx:4px,ry:4px
-        
+
         %% Feature Chips Colors
         classDef iban fill:#172554,stroke:#3b82f6,stroke-width:2px,color:#fff,rx:15px,ry:15px
         classDef send fill:#431407,stroke:#f97316,stroke-width:2px,color:#fff,rx:15px,ry:15px
@@ -48,70 +63,70 @@
 
         %% Architecture Nodes
         User(["Start point<br>(Bank App User)"]):::startEnd
-        
+
         subgraph AWS ["AWS EC2 Instance Hosting"]
-            UI["Page / Process<br>(Dashboard)"]:::process
-            Scanner[/"Input/Output<br>(Receipt Scanner)"/]:::io
-            
-            AI_Agent{"Decision<br>(Banking Action?)"}:::decision
-            
-            YesAction["Yes"]:::yesNode
-            NoAction["No"]:::noNode
-            
-            %% Action Path
-            SendMoney(["Action<br>Send €10 to Sara"]):::send
-            SplitBill(["Action<br>Split €60 with Tom & Mia"]):::split
-            PayLink(["Action<br>Payment link for €25"]):::link
-            
-            %% Query / Information Path
-            GetIBAN(["Query<br>What is my IBAN?"]):::iban
-            GetTxn(["Query<br>Last transactions"]):::txn
-            
-            %% Extended RAG Pipeline
-            EmbeddingModel["Page / Process<br>(BAAI/bge-base Embeddings)"]:::process
-            ChromaDB[("Database<br>(Chroma Vector DB)")]:::database
-            Caveman[/"Input/Output<br>(Caveman Token Optimizer)"/]:::io
+        UI["Page / Process<br>(Dashboard)"]:::process
+        Scanner[/"Input/Output<br>(Receipt Scanner)"/]:::io
+
+        AI_Agent{"Decision<br>(Banking Action?)"}:::decision
+
+        YesAction["Yes"]:::yesNode
+        NoAction["No"]:::noNode
+
+        %% Action Path
+        SendMoney(["Action<br>Send €10 to Sara"]):::send
+        SplitBill(["Action<br>Split €60 with Tom & Mia"]):::split
+        PayLink(["Action<br>Payment link for €25"]):::link
+
+        %% Query / Information Path
+        GetIBAN(["Query<br>What is my IBAN?"]):::iban
+        GetTxn(["Query<br>Last transactions"]):::txn
+
+        %% Extended RAG Pipeline
+        EmbeddingModel["Page / Process<br>(BAAI/bge-base Embeddings)"]:::process
+        ChromaDB[("Database<br>(Chroma Vector DB)")]:::database
+        Caveman[/"Input/Output<br>(Caveman Token Optimizer)"/]:::io
         end
-        
+
         Anthropic["Validations<br>(Anthropic Brain)"]:::dashed
         BunqBank(["End point<br>(bunq Core System)"]):::success
 
         %% Flow
         User --> UI
         UI --> AI_Agent
-        
+
         User --> Scanner
         Scanner --> AI_Agent
-        
+
         %% Action Decision (Yes)
         AI_Agent --- YesAction
         YesAction --> SendMoney
         YesAction --> SplitBill
         YesAction --> PayLink
-        
+
         %% Query Decision (No)
         AI_Agent --- NoAction
         NoAction --> GetIBAN
         NoAction --> GetTxn
         NoAction --> EmbeddingModel
-        
+
         %% RAG & Token Reduction Pipeline
         EmbeddingModel -->|"Vector Search"| ChromaDB
         ChromaDB --> Caveman
-        
+
         %% External AI
         AI_Agent -.-> Anthropic
         Anthropic -.-> AI_Agent
-        
+
         %% Execution & Data Return
         SendMoney --> BunqBank
         SplitBill --> BunqBank
         PayLink --> BunqBank
         GetIBAN --> BunqBank
         GetTxn --> BunqBank
-        
+
         Caveman -.->|"Return optimized context"| AI_Agent
-        
+
         %% Style Subgraph
         style AWS fill:none,stroke:#4a4282,stroke-width:2px,stroke-dasharray: 5 5,color:#fff
     </div>
@@ -120,4 +135,5 @@
         mermaid.initialize({ startOnLoad: true });
     </script>
 </body>
+
 </html>

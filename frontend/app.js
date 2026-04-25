@@ -496,6 +496,31 @@ const chatInput = document.getElementById('chat-input');
 const sendBtn = document.getElementById('send-btn');
 const micBtn = document.getElementById('mic-btn');
 
+let pendingAttachment = null; // staged receipt: { objectUrl, base64, mediaType }
+
+const conversationHistory = []; // [{role:'user'|'assistant', content:string}]
+const HISTORY_MAX = 5;
+
+function getHistoryPayload() {
+  const exchanges = conversationHistory.length / 2;
+  if (exchanges <= HISTORY_MAX) return conversationHistory.slice();
+
+  const keepEntries = HISTORY_MAX * 2;
+  const older  = conversationHistory.slice(0, conversationHistory.length - keepEntries);
+  const recent = conversationHistory.slice(conversationHistory.length - keepEntries);
+
+  const summary = older
+    .filter((_, i) => i % 2 === 0)
+    .map((entry, i) => `Q: ${entry.content} A: ${older[i * 2 + 1]?.content || ''}`)
+    .join(' | ');
+
+  return [
+    { role: 'user',      content: `[Earlier conversation summary: ${summary}]` },
+    { role: 'assistant', content: 'Understood, I have that context.' },
+    ...recent,
+  ];
+}
+
 widgetToggle.addEventListener('click', () => {
   const open = widgetPanel.classList.toggle('open');
   widgetToggle.setAttribute('aria-expanded', open);
@@ -518,18 +543,25 @@ document.querySelectorAll('.quick-prompt').forEach(btn => {
 
 // Send on enter
 chatInput.addEventListener('keydown', e => {
-  if (e.key === 'Enter' && chatInput.value.trim()) {
-    sendMessage(chatInput.value.trim());
-    chatInput.value = '';
+  if (e.key === 'Enter' && (chatInput.value.trim() || pendingAttachment)) {
+    _handleSend();
   }
 });
 
 sendBtn.addEventListener('click', () => {
-  if (chatInput.value.trim()) {
-    sendMessage(chatInput.value.trim());
-    chatInput.value = '';
+  if (chatInput.value.trim() || pendingAttachment) {
+    _handleSend();
   }
 });
+
+function _handleSend() {
+  if (pendingAttachment) {
+    sendAttachment();
+  } else {
+    const text = chatInput.value.trim();
+    if (text) { sendMessage(text); chatInput.value = ''; }
+  }
+}
 
 // ── Message Rendering ─────────────────────────────────────────
 
@@ -622,7 +654,7 @@ async function sendMessage(query) {
     const res = await fetch(`${API_BASE}/guide`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query, page_id: currentPage, page_state: capturePageState() }),
+      body: JSON.stringify({ query, page_id: currentPage, page_state: capturePageState(), history: getHistoryPayload() }),
     });
 
     if (!res.ok) {
@@ -634,6 +666,9 @@ async function sendMessage(query) {
     typingEl.remove();
 
     addMessage(data.response, 'bot', data.steps);
+
+    conversationHistory.push({ role: 'user',      content: query });
+    conversationHistory.push({ role: 'assistant', content: data.response });
 
     // Missing contacts — show options for each unfound person
     if (data.not_found_contacts?.length) {
@@ -850,34 +885,83 @@ document.querySelectorAll('.nav-pill').forEach(btn => {
 // ── Receipt / Camera ──────────────────────────────────────────
 
 const receiptInput = document.getElementById('receipt-input');
-const scanBtn      = document.getElementById('scan-receipt-btn');
+const attachBtnEl  = document.getElementById('attach-btn');
+const attachPreviewEl = document.getElementById('attachment-preview');
+const attachThumbEl   = document.getElementById('attachment-thumb');
+const attachRemoveEl  = document.getElementById('attachment-remove');
 
-scanBtn.addEventListener('click', () => {
+function clearAttachment() {
+  if (pendingAttachment) URL.revokeObjectURL(pendingAttachment.objectUrl);
+  pendingAttachment = null;
+  attachPreviewEl.hidden = true;
+  attachBtnEl.classList.remove('has-file');
+  chatInput.placeholder = 'Ask me anything...';
+}
+
+function renderReceiptCard(data) {
+  const card = document.createElement('div');
+  card.className = 'msg bot';
+  const confClass = data.confidence === 'low' ? 'receipt-confidence-low' : '';
+  const rows = [
+    ['Merchant',  data.merchant],
+    ['Amount',    `${data.currency} ${data.amount?.toFixed(2)}`],
+    ['Category',  data.category],
+    ['Date',      data.date || '—'],
+    ['Payment',   data.payment_method],
+  ];
+  if (data.items?.length) rows.push(['Items', data.items.join(', ')]);
+
+  const tableRows = rows.map(([k, v]) =>
+    `<tr><td class="receipt-tbl-key">${k}</td><td class="receipt-tbl-val">${v}</td></tr>`
+  ).join('');
+
+  card.innerHTML = `
+    <div class="receipt-card ${confClass}">
+      <table class="receipt-table">${tableRows}</table>
+    </div>
+    <div style="font-size:12px;color:var(--text-muted);margin-top:6px">${data.summary}</div>`;
+  return card;
+}
+
+attachBtnEl.addEventListener('click', () => {
   widgetPanel.classList.add('open');
   receiptInput.click();
 });
 
+attachRemoveEl.addEventListener('click', clearAttachment);
+
 receiptInput.addEventListener('change', async () => {
   const file = receiptInput.files[0];
   if (!file) return;
-  receiptInput.value = '';   // reset so same file can be re-selected
-
-  const objectUrl = URL.createObjectURL(file);
-
-  // Show thumbnail + uploading state in chat
-  const preview = document.createElement('div');
-  preview.className = 'msg bot uploading';
-  preview.innerHTML = `
-    <img src="${objectUrl}" class="receipt-thumb" alt="Receipt preview">
-    Analysing receipt...`;
-  messagesEl.appendChild(preview);
-  messagesEl.scrollTop = messagesEl.scrollHeight;
+  receiptInput.value = '';
 
   try {
-    // Read file as base64
     const base64 = await fileToBase64(file);
     const mediaType = file.type || 'image/jpeg';
+    const objectUrl = URL.createObjectURL(file);
 
+    pendingAttachment = { objectUrl, base64, mediaType };
+    attachThumbEl.src = objectUrl;
+    attachPreviewEl.hidden = false;
+    attachBtnEl.classList.add('has-file');
+    chatInput.placeholder = 'Add context or press send…';
+    chatInput.focus();
+  } catch (err) {
+    addMessage(`Could not load image: ${err.message}`, 'bot');
+  }
+});
+
+async function sendAttachment() {
+  const contextText = chatInput.value.trim();
+  const { objectUrl, base64, mediaType } = pendingAttachment;
+
+  if (contextText) addMessage(contextText, 'user');
+  chatInput.value = '';
+  clearAttachment();
+
+  const typingEl = showTyping();
+
+  try {
     const res = await fetch(`${API_BASE}/vision`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -890,42 +974,26 @@ receiptInput.addEventListener('change', async () => {
     }
 
     const data = await res.json();
-    preview.remove();
+    typingEl.remove();
     URL.revokeObjectURL(objectUrl);
 
-    // Build receipt card
-    const card = document.createElement('div');
-    card.className = 'msg bot';
-
-    const confClass = data.confidence === 'low' ? 'receipt-confidence-low' : '';
-    const itemsHtml = data.items?.length
-      ? `<div class="receipt-items">${data.items.join('<br>')}</div>`
-      : '';
-    const dateHtml  = data.date ? ` · ${data.date}` : '';
-
-    card.innerHTML = `
-      <img src="${URL.createObjectURL(file)}" class="receipt-thumb" alt="Receipt">
-      <div class="receipt-card ${confClass}">
-        <div class="receipt-card-header">
-          <div class="receipt-merchant">${data.merchant}</div>
-          <div class="receipt-amount">${data.currency} ${data.amount?.toFixed(2)}</div>
-        </div>
-        <div class="receipt-meta">${data.payment_method}${dateHtml}</div>
-        <div class="receipt-category">${data.category}</div>
-        ${itemsHtml}
-      </div>
-      <div style="font-size:12px;color:var(--text-muted);margin-top:4px">${data.summary}</div>`;
-
+    const card = renderReceiptCard(data);
     messagesEl.appendChild(card);
     messagesEl.scrollTop = messagesEl.scrollHeight;
+
+    // Inject receipt data into history so Claude can reference it in follow-up turns
+    const receiptContext = `Receipt from ${data.merchant}: ${data.currency} ${data.amount?.toFixed(2)}, category: ${data.category}, date: ${data.date || 'unknown'}, items: ${data.items?.join(', ') || 'none'}, payment: ${data.payment_method}.`;
+    conversationHistory.push({ role: 'user',      content: contextText || 'I uploaded a receipt.' });
+    conversationHistory.push({ role: 'assistant', content: receiptContext });
 
     speak(`Receipt from ${data.merchant}. Total ${data.currency} ${data.amount?.toFixed(2)}. Category: ${data.category}.`);
 
   } catch (err) {
-    preview.textContent = `Could not analyse receipt: ${err.message}`;
-    preview.classList.remove('uploading');
+    typingEl.remove();
+    addMessage(`Could not analyse receipt: ${err.message}`, 'bot');
+    URL.revokeObjectURL(objectUrl);
   }
-});
+}
 
 const MAX_FILE_MB  = 5;      // reject before reading
 const MAX_PX       = 1024;   // resize longest side to this

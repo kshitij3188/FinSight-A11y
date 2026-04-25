@@ -140,6 +140,19 @@ TOOLS = [
         },
     },
     {
+        "name": "create_payment_link",
+        "description": "Create a bunq.me payment link that anyone can use to pay the user. Returns a shareable URL.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "amount":      {"type": "number",  "description": "Amount to request in the specified currency"},
+                "description": {"type": "string",  "description": "What the payment is for"},
+                "currency":    {"type": "string",  "default": "EUR"},
+            },
+            "required": ["amount", "description"],
+        },
+    },
+    {
         "name": "format_response",
         "description": "Always call this tool to deliver your final answer to the user. Call information-gathering tools first, then call this once to format the response.",
         "input_schema": {
@@ -241,13 +254,26 @@ def _execute_tool(name: str, inputs: dict, api_key: str | None = None) -> str:
             )
             return json.dumps(result)
 
+        if name == "create_payment_link":
+            if not account_id:
+                return json.dumps({"error": "no account"})
+            from handlers.bunq_api import create_payment_link
+            result = create_payment_link(
+                api_key=api_key,
+                account_id=account_id,
+                amount=inputs["amount"],
+                description=inputs["description"],
+                currency=inputs.get("currency", "EUR"),
+            )
+            return json.dumps(result)
+
     except Exception as e:
         return json.dumps({"error": str(e)})
 
     return json.dumps({"error": f"unknown tool: {name}"})
 
 
-def guide(query: str, page_id: str, page_elements: dict, api_key: str | None = None, page_state: dict | None = None) -> dict:
+def guide(query: str, page_id: str, page_elements: dict, api_key: str | None = None, page_state: dict | None = None, history: list[dict] | None = None) -> dict:
     elements_str = "\n".join(f"  {k}: {v}" for k, v in page_elements.items())
 
     state_str = ""
@@ -263,7 +289,8 @@ def guide(query: str, page_id: str, page_elements: dict, api_key: str | None = N
         f"User question: {query}"
     )
 
-    messages = [{"role": "user", "content": user_message}]
+    messages = list(history) if history else []
+    messages.append({"role": "user", "content": user_message})
 
     # Tool-use loop — max 8 iterations
     for _ in range(8):

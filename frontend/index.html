@@ -71,7 +71,6 @@
         <button class="quick-prompt" data-q="What is my IBAN?">My IBAN</button>
         <button class="quick-prompt" data-q="How do I freeze my card?">Freeze card</button>
         <button class="quick-prompt" data-q="How do I add to my savings?">Add savings</button>
-        <button class="quick-prompt receipt-prompt" id="scan-receipt-btn">📷 Scan receipt</button>
       </div>
 
       <!-- Hidden file input — accepts camera or file on mobile -->
@@ -89,8 +88,14 @@
           <div class="voice-dot"></div>
           Listening…
         </div>
+        <div id="attachment-preview" class="attachment-preview" hidden>
+          <img id="attachment-thumb" class="attachment-thumb-small" alt="Attachment preview">
+          <span class="attachment-label">Receipt attached</span>
+          <button id="attachment-remove" class="attachment-remove-btn" aria-label="Remove attachment">×</button>
+        </div>
         <div class="widget-input-row">
           <button class="btn-icon mic" id="mic-btn" aria-label="Toggle voice input" title="Tap to start, tap again to stop">🎤</button>
+          <button class="btn-icon attach" id="attach-btn" aria-label="Attach receipt image">📎</button>
           <input type="text" id="chat-input" placeholder="Ask me anything..." aria-label="Type your question" autocomplete="off">
           <button class="btn-icon send" id="send-btn" aria-label="Send message">→</button>
         </div>

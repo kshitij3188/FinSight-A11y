@@ -144,6 +144,39 @@ def split_bill(
     }
 
 
+def create_payment_link(
+    api_key: str,
+    account_id: int,
+    amount: float,
+    description: str,
+    currency: str = "EUR",
+) -> dict:
+    client = _get_client(api_key)
+    amount_str = f"{float(amount):.2f}"
+    resp = client.post(
+        f"user/{client.user_id}/monetary-account/{account_id}/bunqme-tab",
+        {
+            "bunqme_tab_entry": {
+                "amount_inquired": {"value": amount_str, "currency": currency},
+                "description": description,
+            }
+        },
+    )
+    tab_id = resp[0]["Id"]["id"]
+    tab_data = client.get(
+        f"user/{client.user_id}/monetary-account/{account_id}/bunqme-tab/{tab_id}"
+    )
+    tab = tab_data[0]["BunqMeTab"]
+    return {
+        "tab_id": tab_id,
+        "url": tab.get("bunqme_tab_share_url", ""),
+        "amount": amount_str,
+        "currency": currency,
+        "description": description,
+        "status": tab.get("status", ""),
+    }
+
+
 def get_transactions(api_key: str, account_id: int, count: int = 10) -> list[dict]:
     client = _get_client(api_key)
     items = client.get(

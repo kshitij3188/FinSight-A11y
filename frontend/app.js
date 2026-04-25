@@ -102,6 +102,10 @@ const PAGES = {
 };
 
 let currentPage = 'home';
+let currentMode = 'default';
+let currentLang = 'en';
+let voiceMode   = false;   // user has voice mode ON (persists, gates TTS)
+let isListening = false;   // mic is currently open (transient)
 
 // ── Page Renderers ────────────────────────────────────────────
 
@@ -346,64 +350,126 @@ function navigateTo(pageId) {
   clearHighlights();
   currentPage = pageId;
 
-  // Update nav
   document.querySelectorAll('.nav-pill').forEach(btn => {
     const active = btn.dataset.page === pageId;
     btn.classList.toggle('active', active);
     btn.setAttribute('aria-selected', active);
   });
 
-  // Render page
-  document.getElementById('page-content').innerHTML = PAGES[pageId].render();
+  const pageContent = document.getElementById('page-content');
+  pageContent.innerHTML = PAGES[pageId].render();
   document.title = `bunq — ${PAGES[pageId].title}`;
   window.scrollTo({ top: 0, behavior: 'smooth' });
-
-  // Announce page change for screen readers
   announce(`Navigated to ${PAGES[pageId].title}`);
+
+  // Move focus to main content so screen readers land on new page (M1)
+  pageContent.setAttribute('tabindex', '-1');
+  pageContent.focus({ preventScroll: true });
+
+  // Proactive guide for form pages when voice mode is on
+  if (voiceMode && ['pay', 'savings'].includes(pageId)) {
+    setTimeout(() => {
+      widgetPanel.classList.add('open');
+      sendMessage('Guide me through this page');
+    }, 500);
+  }
 }
 
-// ── Highlight System ──────────────────────────────────────────
+// ── Highlight System (Lighthouse) ────────────────────────────
 
-function highlightElements(ids) {
+function highlightElements(ids, narration, steps) {
   clearHighlights();
   if (!ids || ids.length === 0) return;
 
-  ids.forEach((id, idx) => {
-    const el = document.querySelector(`[data-element-id="${id}"]`);
-    if (!el) return;
-    el.classList.add('ai-highlight');
+  // Announce for screen readers (M2)
+  const firstEl = document.querySelector(`[data-element-id="${ids[0]}"]`);
+  if (firstEl) {
+    announce(`Highlighted: ${firstEl.getAttribute('aria-label') || ids[0]}`);
+  }
 
-    // Scroll first element into view
-    if (idx === 0) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  if (ids.length === 1) {
+    _lighthouseHighlight(ids[0], narration || '');
+  } else {
+    const narrations = (steps && steps.length) ? steps : ids.map(() => narration || '');
+    _applyHighlightsSequential(ids.map((id, i) => ({ id, narration: narrations[i] || '' })));
+  }
+}
 
-      // Add floating label positioned within the phone frame
-      setTimeout(() => {
-        const rect = el.getBoundingClientRect();
-        const frame = document.querySelector('.phone-frame');
-        const screen = document.querySelector('.phone-screen');
-        const frameRect = frame.getBoundingClientRect();
-        const scrollTop = screen ? screen.scrollTop : 0;
-        const arrow = document.createElement('div');
-        arrow.className = 'ai-arrow';
-        arrow.textContent = '← Here';
-        arrow.style.top = `${rect.top - frameRect.top + scrollTop - 32}px`;
-        arrow.style.left = `${rect.right - frameRect.left + 8}px`;
-        arrow.id = 'ai-arrow-label';
-        frame.appendChild(arrow);
-      }, 300);
-    }
-  });
+async function _applyHighlightsSequential(highlights) {
+  for (let i = 0; i < highlights.length; i++) {
+    if (i > 0) await _sleep(1800);
+    _lighthouseHighlight(highlights[i].id, highlights[i].narration);
+  }
+}
 
-  // Auto-clear after 8 seconds
+function _lighthouseHighlight(id, narration) {
+  const el = document.querySelector(`[data-element-id="${id}"]`);
+  if (!el) return;
+
+  el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  el.classList.add('lh-target');
+  document.getElementById('lh-overlay').classList.add('active');
+  _moveMascot(el);
+
+  if (narration) {
+    _showNarration(narration);
+    speak(narration);
+  }
+
+  // Arrow label — fixed M5: removed double scrollTop
+  setTimeout(() => {
+    const rect = el.getBoundingClientRect();
+    const frame = document.querySelector('.phone-frame');
+    const frameRect = frame.getBoundingClientRect();
+    const arrow = document.createElement('div');
+    arrow.className = 'ai-arrow';
+    arrow.textContent = '← Here';
+    arrow.style.top = `${rect.top - frameRect.top - 32}px`;
+    arrow.style.left = `${rect.right - frameRect.left + 8}px`;
+    arrow.id = 'ai-arrow-label';
+    frame.appendChild(arrow);
+  }, 300);
+
+  el.addEventListener('click', () => clearHighlights(), { once: true });
   setTimeout(clearHighlights, 8000);
 }
 
 function clearHighlights() {
-  document.querySelectorAll('.ai-highlight').forEach(el => el.classList.remove('ai-highlight'));
+  document.querySelectorAll('.lh-target, .ai-highlight').forEach(el => {
+    el.classList.remove('lh-target', 'ai-highlight');
+  });
+  document.getElementById('lh-overlay').classList.remove('active');
+  _hideMascot();
+  _hideNarration();
   const arrow = document.getElementById('ai-arrow-label');
   if (arrow) arrow.remove();
 }
+
+function _moveMascot(targetEl) {
+  const mascot = document.getElementById('mascot');
+  const rect = targetEl.getBoundingClientRect();
+  const x = Math.min(rect.right + 12, window.innerWidth - 64);
+  const y = Math.max(8, Math.min(rect.top + rect.height / 2 - 22, window.innerHeight - 56));
+  mascot.style.transform = `translate(${x}px, ${y}px)`;
+  mascot.classList.add('visible');
+}
+
+function _hideMascot() {
+  const mascot = document.getElementById('mascot');
+  if (mascot) mascot.classList.remove('visible');
+}
+
+function _showNarration(text) {
+  const toast = document.getElementById('narration-toast');
+  if (toast) { toast.textContent = text; toast.classList.add('visible'); }
+}
+
+function _hideNarration() {
+  const toast = document.getElementById('narration-toast');
+  if (toast) toast.classList.remove('visible');
+}
+
+function _sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 // ── Accessibility Helpers ─────────────────────────────────────
 
@@ -494,6 +560,56 @@ function showTyping() {
   return msg;
 }
 
+// ── Page State Capture ────────────────────────────────────────
+
+function capturePageState() {
+  const state = {};
+  document.querySelectorAll('[data-element-id]').forEach(el => {
+    const id = el.dataset.elementId;
+    const input = el.querySelector('input, textarea, select');
+    if (input && input.value.trim()) state[id] = input.value.trim();
+    if (el.getAttribute('role') === 'switch') {
+      state[id] = el.getAttribute('aria-checked') === 'true' ? 'on' : 'off';
+    }
+  });
+  return state;
+}
+
+// ── AI-Driven UI Actions ──────────────────────────────────────
+
+async function executeActions(actions) {
+  const overlay = document.getElementById('lh-overlay');
+  for (const action of actions) {
+    const el = document.querySelector(`[data-element-id="${action.element_id}"]`);
+    if (!el) continue;
+
+    el.classList.add('lh-target');
+    overlay.classList.add('active');
+    _moveMascot(el);
+
+    await _sleep(600);
+
+    if (action.type === 'click') {
+      el.click();
+    } else if (action.type === 'fill') {
+      const input = el.querySelector('input, textarea') || (el.matches('input, textarea') ? el : null);
+      if (input) {
+        input.value = action.value || '';
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.focus();
+      }
+    } else if (action.type === 'focus') {
+      el.setAttribute('tabindex', '-1');
+      el.focus();
+    }
+
+    await _sleep(700);
+    el.classList.remove('lh-target');
+  }
+  overlay.classList.remove('active');
+  _hideMascot();
+}
+
 // ── API Call ──────────────────────────────────────────────────
 
 async function sendMessage(query) {
@@ -506,7 +622,7 @@ async function sendMessage(query) {
     const res = await fetch(`${API_BASE}/guide`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query, page_id: currentPage }),
+      body: JSON.stringify({ query, page_id: currentPage, page_state: capturePageState() }),
     });
 
     if (!res.ok) {
@@ -531,12 +647,26 @@ async function sendMessage(query) {
 
     // Highlight elements (after navigation renders new DOM)
     setTimeout(() => {
-      highlightElements(data.highlight_elements || []);
+      highlightElements(data.highlight_elements || [], data.response, data.steps || []);
     }, 300);
 
-    // Speak response
+    // Execute AI-driven UI actions (fill fields, click buttons)
+    if (data.actions?.length) {
+      setTimeout(() => executeActions(data.actions), 500);
+    }
+
+    // Always speak response; stop mic first to prevent feedback loop
     if (data.speak !== false) {
-      speak(data.response + (data.steps?.length ? '. ' + data.steps.join('. ') : ''));
+      const ttsText = data.response + (data.steps?.length ? '. ' + data.steps.join('. ') : '');
+      if (isListening) {
+        isListening = false;
+        try { recognition.stop(); } catch (_) {}
+        _setMicUI(false);
+        // Chrome bug: recognition.stop() + speak() same tick → TTS silently dropped
+        setTimeout(() => speak(ttsText), 250);
+      } else {
+        speak(ttsText);
+      }
     }
 
   } catch (err) {
@@ -547,107 +677,126 @@ async function sendMessage(query) {
 
 // ── Text-to-Speech ────────────────────────────────────────────
 
-let currentUtterance = null;
-
-function speak(text) {
-  if (!('speechSynthesis' in window)) return;
+function speak(text, onFinished) {
+  if (!('speechSynthesis' in window)) { if (onFinished) onFinished(); return; }
   window.speechSynthesis.cancel();
-  const utterance = new SpeechSynthesisUtterance(text);
-  utterance.rate = 0.92;
+  const utterance = new SpeechSynthesisUtterance(text.replace(/[#*`]/g, ''));
+  utterance.rate  = currentMode === 'blind' ? 0.9 : 0.92;
   utterance.pitch = 1.0;
-  utterance.lang = 'en-GB';
-  // Prefer a natural voice
-  const voices = window.speechSynthesis.getVoices();
-  const preferred = voices.find(v => v.name.includes('Samantha') || v.name.includes('Karen') || v.name.includes('Daniel'));
+  utterance.lang  = currentLang === 'nl' ? 'nl-NL' : 'en-GB';
+  const voices    = window.speechSynthesis.getVoices();
+  const preferred = voices.find(v =>
+    v.name.includes('Samantha') || v.name.includes('Karen') || v.name.includes('Daniel')
+  );
   if (preferred) utterance.voice = preferred;
-  currentUtterance = utterance;
+  utterance.onend = () => {
+    if (onFinished) onFinished();
+    // Auto-restart mic after TTS ends — fully interactive loop
+    if (voiceMode && !isListening) {
+      isListening = true;
+      recognition.lang = currentLang === 'nl' ? 'nl-NL' : 'en-US';
+      _setMicUI(true);
+      try { recognition.start(); } catch (_) {}
+    }
+  };
   window.speechSynthesis.speak(utterance);
 }
-
-// Load voices when available (Chrome loads them async)
-window.speechSynthesis.onvoiceschanged = () => {};
 
 // ── Voice Input ───────────────────────────────────────────────
 
 let recognition = null;
-let isRecording = false;
-let accumulatedTranscript = '';
 
-if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+(function initVoice() {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) {
+    micBtn.style.opacity = '0.4';
+    micBtn.title = 'Voice input not supported in this browser';
+    return;
+  }
+
   recognition = new SR();
-  recognition.lang = 'en-US';
-  recognition.continuous = true;
+  recognition.continuous     = true;
   recognition.interimResults = true;
+
+  let silenceTimer    = null;
+  let finalTranscript = '';
 
   recognition.onresult = e => {
     let interim = '';
     for (let i = e.resultIndex; i < e.results.length; i++) {
-      const res = e.results[i];
-      if (res.isFinal) {
-        accumulatedTranscript += res[0].transcript;
+      if (e.results[i].isFinal) {
+        finalTranscript += e.results[i][0].transcript + ' ';
       } else {
-        interim += res[0].transcript;
+        interim += e.results[i][0].transcript;
       }
     }
-    // Mirror live text into input for user feedback — don't send yet
-    chatInput.value = (accumulatedTranscript + interim).trim();
-  };
+    // Show live text while speaking
+    chatInput.value = finalTranscript + interim;
 
-  recognition.onerror = e => {
-    // Log but don't touch UI state — stopRecording owns that
-    console.warn('SpeechRecognition error:', e.error);
+    // Send after 1.5s of silence
+    clearTimeout(silenceTimer);
+    silenceTimer = setTimeout(() => {
+      const text = finalTranscript.trim();
+      finalTranscript = '';
+      chatInput.value = '';
+      if (text) sendMessage(text);
+    }, 1500);
   };
 
   recognition.onend = () => {
-    // Chrome auto-terminates even continuous recognition after ~60s.
-    // If user is still holding, restart silently.
-    if (isRecording) {
-      try { recognition.start(); } catch (err) { /* already starting */ }
+    // If voice mode still on, Chrome killed it — restart silently
+    if (voiceMode && isListening) {
+      try { recognition.start(); } catch (_) {}
+    } else {
+      isListening = false;
+      _setMicUI(false);
     }
   };
 
-  const startRecording = () => {
-    if (isRecording) return;
-    window.speechSynthesis.cancel();
-    accumulatedTranscript = '';
-    chatInput.value = '';
-    isRecording = true;
+  recognition.onerror = e => {
+    if (e.error === 'aborted') return;  // intentional stop — ignore
+    isListening = false;
+    _setMicUI(false);
+    if (e.error !== 'no-speech') addMessage('Voice error: ' + e.error, 'bot');
+  };
+})();
+
+function _setMicUI(on) {
+  if (on) {
     micBtn.classList.add('recording');
-    micBtn.setAttribute('aria-label', 'Recording — release to send');
-    widgetPanel.classList.add('open');
-    try {
-      recognition.start();
-    } catch (e) {
-      isRecording = false;
-      micBtn.classList.remove('recording');
-    }
-  };
-
-  const stopRecording = () => {
-    if (!isRecording) return;
-    isRecording = false;
+    micBtn.setAttribute('aria-label', 'Listening — tap to stop');
+    document.querySelector('.voice-indicator').classList.add('active');
+  } else {
     micBtn.classList.remove('recording');
-    micBtn.setAttribute('aria-label', 'Voice input — press and hold to speak');
-    try { recognition.stop(); } catch (e) {}
-
-    const text = (accumulatedTranscript || chatInput.value).trim();
-    accumulatedTranscript = '';
-    if (text) {
-      chatInput.value = '';
-      sendMessage(text);
-    }
-  };
-
-  // Tap to toggle — first click starts, second click stops + sends
-  micBtn.addEventListener('click', () => {
-    if (isRecording) stopRecording();
-    else startRecording();
-  });
-} else {
-  micBtn.style.opacity = '0.4';
-  micBtn.title = 'Voice input not supported in this browser';
+    micBtn.setAttribute('aria-label', 'Toggle voice input');
+    document.querySelector('.voice-indicator').classList.remove('active');
+  }
 }
+
+function startVoiceMode() {
+  if (!recognition) { addMessage('Speech recognition not supported in this browser.', 'bot'); return; }
+  window.speechSynthesis.cancel();
+  voiceMode   = true;
+  isListening = true;
+  recognition.lang = currentLang === 'nl' ? 'nl-NL' : 'en-US';
+  _setMicUI(true);
+  widgetPanel.classList.add('open');
+  chatInput.value = '';
+  try { recognition.start(); } catch (e) {
+    voiceMode = false; isListening = false; _setMicUI(false);
+  }
+}
+
+function stopVoiceMode() {
+  voiceMode   = false;
+  isListening = false;
+  if (recognition) try { recognition.stop(); } catch (_) {}
+  _setMicUI(false);
+}
+
+micBtn.addEventListener('click', () => {
+  voiceMode ? stopVoiceMode() : startVoiceMode();
+});
 
 // ── UI Helpers ────────────────────────────────────────────────
 
@@ -665,6 +814,31 @@ function toggleSwitch(el) {
   const isOn = !el.classList.contains('off');
   el.classList.toggle('off', isOn);
   el.setAttribute('aria-checked', !isOn);
+  announce(`${el.getAttribute('aria-label')} turned ${!isOn ? 'on' : 'off'}`);
+}
+
+// ── Accessibility mode + language ─────────────────────────────
+
+function setMode(mode) {
+  currentMode = mode;
+  ['default', 'blind', 'low_vision', 'dyslexic'].forEach(m => document.body.classList.remove(`mode-${m}`));
+  if (mode !== 'default') document.body.classList.add(`mode-${mode}`);
+  document.querySelectorAll('.mode-btn').forEach(btn => {
+    const active = btn.dataset.mode === mode;
+    btn.classList.toggle('active', active);
+    btn.setAttribute('aria-pressed', active);
+  });
+  announce(`Accessibility mode: ${mode.replace('_', ' ')}`);
+}
+
+function setLang(lang) {
+  currentLang = lang;
+  if (recognition) recognition.lang = lang === 'nl' ? 'nl-NL' : 'en-US';
+  document.querySelectorAll('.lang-btn').forEach(btn => {
+    const active = btn.dataset.lang === lang;
+    btn.classList.toggle('active', active);
+    btn.setAttribute('aria-pressed', active);
+  });
 }
 
 // ── Nav click handlers ────────────────────────────────────────
@@ -861,16 +1035,25 @@ async function init() {
     return;
   }
 
+  // Wire accessibility mode + language buttons
+  document.querySelectorAll('.mode-btn').forEach(btn => {
+    btn.addEventListener('click', () => setMode(btn.dataset.mode));
+  });
+  document.querySelectorAll('.lang-btn').forEach(btn => {
+    btn.addEventListener('click', () => setLang(btn.dataset.lang));
+  });
+
   navigateTo('home');
   loadBunqData();
 }
 
-// Redirect to login on any 401
+// Redirect to login on any 401 — return never-resolving promise so caller never runs (H2)
 const _origFetch = window.fetch;
 window.fetch = async (...args) => {
   const res = await _origFetch(...args);
   if (res.status === 401) {
     window.location.href = '/login';
+    return new Promise(() => {});
   }
   return res;
 };

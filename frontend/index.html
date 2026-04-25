@@ -4,9 +4,21 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>bunq — AI Accessibility Guide</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://fonts.cdnfonts.com/css/opendyslexic" />
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
+
+<!-- Lighthouse overlay -->
+<div id="lh-overlay" aria-hidden="true"></div>
+
+<!-- Animated guide mascot -->
+<div id="mascot" aria-hidden="true">✦</div>
+
+<!-- Narration toast -->
+<div id="narration-toast" role="status" aria-live="polite"></div>
 
 <div class="phone-frame">
 
@@ -22,6 +34,20 @@
     </div>
     <div class="nav-avatar" aria-label="Profile">A</div>
   </nav>
+
+  <!-- Accessibility controls bar -->
+  <div class="a11y-bar">
+    <div class="mode-selector" role="group" aria-label="Accessibility mode">
+      <button class="mode-btn active" data-mode="default" aria-pressed="true">Aa</button>
+      <button class="mode-btn" data-mode="blind" aria-pressed="false">👁</button>
+      <button class="mode-btn" data-mode="low_vision" aria-pressed="false">🔍</button>
+      <button class="mode-btn" data-mode="dyslexic" aria-pressed="false">Dy</button>
+    </div>
+    <div class="lang-selector" role="group" aria-label="Language">
+      <button class="lang-btn active" data-lang="en" aria-pressed="true">EN</button>
+      <button class="lang-btn" data-lang="nl" aria-pressed="false">NL</button>
+    </div>
+  </div>
 
   <div class="phone-screen">
     <!-- Page Content (rendered by JS) -->
@@ -59,9 +85,15 @@
       </div>
 
       <div class="widget-input-area">
-        <button class="btn-icon mic" id="mic-btn" aria-label="Voice input — tap to start, tap again to send" title="Tap to start, tap again to send">🎤</button>
-        <input type="text" id="chat-input" placeholder="Ask me anything..." aria-label="Type your question" autocomplete="off">
-        <button class="btn-icon send" id="send-btn" aria-label="Send message">→</button>
+        <div class="voice-indicator" aria-live="polite">
+          <div class="voice-dot"></div>
+          Listening…
+        </div>
+        <div class="widget-input-row">
+          <button class="btn-icon mic" id="mic-btn" aria-label="Toggle voice input" title="Tap to start, tap again to stop">🎤</button>
+          <input type="text" id="chat-input" placeholder="Ask me anything..." aria-label="Type your question" autocomplete="off">
+          <button class="btn-icon send" id="send-btn" aria-label="Send message">→</button>
+        </div>
       </div>
     </div>
   </div>

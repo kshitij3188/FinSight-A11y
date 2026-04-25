@@ -1,0 +1,2 @@
+- [bunq-accessibility project inventory](project_bunq_accessibility.md) — full feature + architecture inventory of sibling repo; use to inform FinSight-A11y integration
+- [FinSight-A11y Project Context](project_finsight_a11y.md) — stack, auth, RAG, bunq client, known bugs from 2026-04-25 audit

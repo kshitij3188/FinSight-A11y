@@ -26,13 +26,13 @@ App runs at `http://localhost:8000`.
 
 ## Environment Variables
 
-| Variable            | Required | Description                                         |
-| ------------------- | -------- | --------------------------------------------------- |
-| `ANTHROPIC_API_KEY` | Yes      | Claude API key for guide + vision                   |
-| `GROQ_API_KEY`      | Yes      | Groq Whisper for speech-to-text                     |
-| `BUNQ_API_KEY`      | No       | bunq sandbox API key (auto-created if absent)       |
-| `BUNQ_ENVIRONMENT`  | No       | `SANDBOX` (default) or `PRODUCTION`                 |
-| `SECRET_KEY`        | No       | Cookie signing key (hardcoded dev default if unset) |
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `ANTHROPIC_API_KEY` | Yes | Claude API key for guide + vision |
+| `GROQ_API_KEY` | Yes | Groq Whisper for speech-to-text |
+| `BUNQ_API_KEY` | No | bunq sandbox API key (auto-created if absent) |
+| `BUNQ_ENVIRONMENT` | No | `SANDBOX` (default) or `PRODUCTION` |
+| `SECRET_KEY` | No | Cookie signing key (hardcoded dev default if unset) |
 
 ---
 
@@ -67,7 +67,6 @@ mock_users.json           10 sandbox test users with API keys
 ## Features
 
 ### AI Guide (Bunqy)
-
 - Conversational assistant powered by Claude claude-sonnet-4-6 with tool use
 - Three response modes:
   - **MODE 0** — Informational: answers questions using live account data or RAG docs, no UI interaction
@@ -77,7 +76,6 @@ mock_users.json           10 sandbox test users with API keys
 - Quick-prompt chips for common tasks
 
 ### Voice I/O
-
 - **STT**: MediaRecorder → Groq Whisper. Silence detection (1.5s RMS threshold) auto-stops recording
 - **TTS**: edge-tts (Microsoft Neural, en-GB-SoniaNeural). AudioContext-based playback (no autoplay policy issues)
 - Voice mode: mic re-opens automatically after each TTS response
@@ -85,19 +83,17 @@ mock_users.json           10 sandbox test users with API keys
 - When highlight is active, only step narrations are spoken — chatbot reply is suppressed to avoid overlap
 
 ### Accessibility Modes
-
-| Mode              | Effect                                                   |
-| ----------------- | -------------------------------------------------------- |
-| Default           | Standard dark theme                                      |
-| Blind (`👁`)       | Full voice-first, enlarged text, screen-reader optimised |
-| Low Vision (`🔍`) | High contrast, larger elements                           |
-| Dyslexic (`Dy`)   | OpenDyslexic font, warm color scheme, spaced chat output |
-| Colorblind (`CB`) | Blue/amber palette replacing red/green signals           |
+| Mode | Effect |
+|------|--------|
+| Default | Standard dark theme |
+| Blind (`👁`) | Full voice-first, enlarged text, screen-reader optimised |
+| Low Vision (`🔍`) | High contrast, larger elements |
+| Dyslexic (`Dy`) | OpenDyslexic font, warm color scheme, spaced chat output |
+| Colorblind (`CB`) | Blue/amber palette replacing red/green signals |
 
 ### Banking Flows
 
 **Send Money (`/pay`)**
-
 - Separate Name + IBAN fields (both pre-fillable from contacts)
 - Recent contacts loaded from live transaction history (up to 5 unique counterparties)
 - Contact chips show full name + IBAN; clicking pre-fills both fields and highlights them
@@ -105,13 +101,11 @@ mock_users.json           10 sandbox test users with API keys
 - Submits via `/pay` → bunq payment API
 
 **Request Money (`/request`)**
-
 - Smart routing: "From" field filled → `split_bill` (sends bunq payment request notification to person)
 - "From" field blank → `create_payment_link` (generates shareable bunq.me URL)
 - Link result screen shows URL with copy button
 
 **Recent Transactions**
-
 - Loaded from live bunq API; falls back to mock data
 - Counterparty IBAN extracted from `Payment.counterparty_alias.label_monetary_account.alias`
 - Missing IBANs resolved from `KNOWN_USERS` map by partial name match
@@ -119,7 +113,6 @@ mock_users.json           10 sandbox test users with API keys
 - "Send Money" shortcut in sheet pre-fills Pay form
 
 ### Notifications
-
 - **Push banner**: slides down from top on April 25 — salary (💰, with confetti) and rent (🏠) alerts
 - **Notification centre**: accessible via profile avatar (top-left)
   - Shows all push banners that have fired (persisted in session)
@@ -130,7 +123,6 @@ mock_users.json           10 sandbox test users with API keys
 - Test banners any day: append `?testPayday=1` or `?testRent=1` to URL
 
 ### Receipt Scanner
-
 - Attach image via clip icon in chat
 - Sends to Claude vision → extracts merchant, amount, currency, date, category, items, payment method
 
@@ -138,22 +130,22 @@ mock_users.json           10 sandbox test users with API keys
 
 ## API Endpoints
 
-| Method | Path                      | Description                                           |
-| ------ | ------------------------- | ----------------------------------------------------- |
-| `POST` | `/guide`                  | AI guide — returns highlight steps, actions, response |
-| `POST` | `/vision`                 | Receipt OCR — returns structured receipt data         |
-| `POST` | `/pay`                    | Execute payment via bunq API                          |
-| `POST` | `/request-person`         | Send payment request to a named contact               |
-| `POST` | `/payment-link`           | Create shareable bunq.me payment link                 |
-| `POST` | `/stt`                    | Speech-to-text (Groq Whisper)                         |
-| `POST` | `/tts`                    | Text-to-speech (edge-tts)                             |
-| `POST` | `/notifications/register` | Register MUTATION push filter with bunq               |
-| `GET`  | `/api/me`                 | Logged-in user info                                   |
-| `GET`  | `/api/accounts`           | Live account list                                     |
-| `GET`  | `/api/transactions`       | Recent transactions                                   |
-| `GET`  | `/api/requests-received`  | Pending payment requests received                     |
-| `GET`  | `/api/debug/transaction`  | Raw bunq payment response (debug)                     |
-| `GET`  | `/health`                 | Server health + ChromaDB status                       |
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/guide` | AI guide — returns highlight steps, actions, response |
+| `POST` | `/vision` | Receipt OCR — returns structured receipt data |
+| `POST` | `/pay` | Execute payment via bunq API |
+| `POST` | `/request-person` | Send payment request to a named contact |
+| `POST` | `/payment-link` | Create shareable bunq.me payment link |
+| `POST` | `/stt` | Speech-to-text (Groq Whisper) |
+| `POST` | `/tts` | Text-to-speech (edge-tts) |
+| `POST` | `/notifications/register` | Register MUTATION push filter with bunq |
+| `GET` | `/api/me` | Logged-in user info |
+| `GET` | `/api/accounts` | Live account list |
+| `GET` | `/api/transactions` | Recent transactions |
+| `GET` | `/api/requests-received` | Pending payment requests received |
+| `GET` | `/api/debug/transaction` | Raw bunq payment response (debug) |
+| `GET` | `/health` | Server health + ChromaDB status |
 
 ---
 
@@ -183,15 +175,15 @@ Cookie-based sessions via `itsdangerous`. Users loaded from `mock_users.json` at
 
 10 pre-configured sandbox users in `mock_users.json`. Get test money via payment from `sugardaddy@bunq.com` (up to EUR 500). See `hackathon_toolkit/03_make_payment.py`.
 
-| User             | IBAN               |
-| ---------------- | ------------------ |
-| Ayako Mercati    | NL69BUNQ2106218508 |
-| Corrin Hunt      | NL08BUNQ2106236581 |
-| Lydia York       | NL32BUNQ2106231105 |
-| Anne Hunt        | NL06BUNQ2106235550 |
-| Ewoud Preece     | NL67BUNQ2106230184 |
+| User | IBAN |
+|------|------|
+| Ayako Mercati | NL69BUNQ2106218508 |
+| Corrin Hunt | NL08BUNQ2106236581 |
+| Lydia York | NL32BUNQ2106231105 |
+| Anne Hunt | NL06BUNQ2106235550 |
+| Ewoud Preece | NL67BUNQ2106230184 |
 | Frederieke Doyle | NL04BUNQ2106237138 |
-| Nancee Taylor    | NL14BUNQ2106230168 |
-| Angela Finnegan  | NL87BUNQ2106241852 |
-| Derick Taylor    | NL63BUNQ2106240538 |
-| Petros Darcy     | NL36BUNQ2106228414 |
+| Nancee Taylor | NL14BUNQ2106230168 |
+| Angela Finnegan | NL87BUNQ2106241852 |
+| Derick Taylor | NL63BUNQ2106240538 |
+| Petros Darcy | NL36BUNQ2106228414 |

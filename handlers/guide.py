@@ -20,7 +20,7 @@ class GuideResponse(BaseModel):
     response: str
     highlight_elements: list[str] = []
     steps: list[str] = []
-    navigate_to: Literal["home", "pay", "accounts", "cards", "savings"] | None = None
+    navigate_to: Literal["home", "pay", "request", "accounts", "cards", "savings"] | None = None
     speak: bool = True
     not_found_contacts: list[str] = []
     action: Literal["split_completed", "awaiting_contact_info"] | None = None
@@ -174,7 +174,7 @@ TOOLS = [
                 },
                 "navigate_to": {
                     "type": "string",
-                    "enum": ["home", "pay", "accounts", "cards", "savings"],
+                    "enum": ["home", "pay", "request", "accounts", "cards", "savings"],
                     "description": "Page to navigate to, or omit if no navigation needed",
                 },
                 "speak": {

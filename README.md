@@ -4,7 +4,101 @@ Multimodal AI banking assistant built on the bunq API. Designed for low-vision a
 
 ---
 
-## Quick Start
+## Live Demo & Hosting
+
+This application is deployed for the hackathon using an **AWS EC2 instance** running on a `c7i-flex.large` instance to ensure robust performance for the backend AI operations. 
+
+To provide a secure HTTPS endpoint (which is required for browser APIs like microphone access for voice features), we utilize local tunneling.
+
+🌐 **Live Feature Link:** [https://olive-lemons-burn.loca.lt/](https://olive-lemons-burn.loca.lt/)
+
+*(Note: If the live tunnel is temporarily unavailable, the application can easily be run locally as an alternative, as described in the Quick Start below).*
+
+---
+
+## Architecture Flowchart
+
+```mermaid
+flowchart TD
+    %% Global Styles
+    classDef user fill:#393c6f,stroke:none,color:#fff,rx:10,ry:10
+    classDef frontend fill:#1a192b,stroke:#8a8eac,stroke-width:2px,color:#fff,rx:5,ry:5
+    classDef process fill:#2d2931,stroke:#c4714b,stroke-width:2px,color:#fff,rx:4px,ry:4px
+    classDef ai fill:#2d1b36,stroke:#6b437a,stroke-width:2px,color:#fff
+    classDef bunq fill:#172554,stroke:#3b82f6,stroke-width:2px,color:#fff
+    classDef db fill:#363121,stroke:#a68a36,stroke-width:2px,color:#fff
+    classDef ext fill:#1c1a36,stroke:#4a4282,stroke-width:2px,color:#fff,stroke-dasharray: 5 5
+
+    User(["👤 User (Low Vision / Accessibility First)"]):::user
+
+    subgraph Client ["Frontend (Browser / Mobile)"]
+        UI["💻 SPA Interface"]:::frontend
+        Voice["🎙️ Voice Input/Output"]:::frontend
+        Camera["📷 Receipt Scanner"]:::frontend
+    end
+
+    subgraph AWS ["Backend Server (AWS EC2 - c7i-flex.large)"]
+        API["⚡ FastAPI Application Hub"]:::process
+        
+        subgraph AI_RAG ["AI & RAG Subsystem"]
+            Agent{"🧠 Core Logic / AI Agent"}:::ai
+            Embed["📊 Embeddings Model (BAAI/bge-base)"]:::ai
+            VectorDB[("💾 Chroma Vector DB (Help Docs)")]:::db
+            
+            Agent <-->|"Queries Context"| Embed
+            Embed <-->|"Vector Search"| VectorDB
+        end
+        
+        subgraph BunqHub ["Bunq API Wrapper"]
+            Auth["🔒 Session Auth"]:::bunq
+            Ops{"⚙️ Execute Operation"}:::bunq
+            
+            Ops -.-> Pay["💸 Send Payment"]:::bunq
+            Ops -.-> Split["✂️ Split Bill"]:::bunq
+            Ops -.-> Link["🔗 Payment Link"]:::bunq
+            Ops -.-> Fetch["📋 Fetch Accounts / Txns"]:::bunq
+        end
+    end
+
+    subgraph External ["External Services"]
+        Anthropic["🤖 Anthropic API (Claude 3.5 Sonnet)"]:::ext
+        Groq["👂 Groq Whisper API (STT)"]:::ext
+        EdgeTTS["🗣️ Microsoft Edge TTS"]:::ext
+        BunqBank(["🏦 bunq Core Banking System"]):::ext
+    end
+
+    %% Connections
+    User -->|Interacts| Client
+    UI -->|HTTP Requests| API
+    Voice -->|Audio Stream| Groq
+    Camera -->|Image Upload| API
+    
+    Groq -->|Transcribed Text| API
+    API -->|Prompt & Tools| Agent
+    
+    Agent <-->|Requires Vision/Logic| Anthropic
+    Agent -->|Generates Response| EdgeTTS
+    EdgeTTS -->|Audio Playback| Voice
+    
+    Agent -->|Execute Banking Action| Auth
+    Auth --> Ops
+    Pay & Split & Link & Fetch -->|REST API Calls| BunqBank
+    BunqBank -->|JSON Response| Ops
+    Ops -->|Data Formatting| Agent
+
+    %% Subgraph Styling
+    style Client fill:none,stroke:#8a8eac,stroke-width:2px,stroke-dasharray: 5 5,rx:10,ry:10
+    style AWS fill:#221f2e,stroke:#4a4282,stroke-width:2px,rx:10,ry:10
+    style External fill:none,stroke:#4a4282,stroke-width:2px,stroke-dasharray: 5 5,rx:10,ry:10
+    style AI_RAG fill:#2a1c30,stroke:#6b437a,stroke-width:1px,rx:8,ry:8
+    style BunqHub fill:#111b3d,stroke:#3b82f6,stroke-width:1px,rx:8,ry:8
+```
+
+---
+
+## Quick Start (Local Setup)
+
+As an alternative to the live link, you can install the dependencies via `requirements.txt` and run the app locally.
 
 ```bash
 # 1. Install dependencies

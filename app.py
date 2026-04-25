@@ -380,6 +380,18 @@ def api_accounts(request: Request):
         return {"accounts": [], "mock": True, "error": str(e)}
 
 
+@app.get("/api/requests-received")
+def api_requests_received(request: Request):
+    user = _get_session_user(request)
+    if not user:
+        return {"requests": [], "mock": True}
+    try:
+        from handlers.bunq_api import get_received_requests
+        return {"requests": get_received_requests(user["api_key"]), "mock": False}
+    except Exception as e:
+        return {"requests": [], "mock": True, "error": str(e)}
+
+
 @app.get("/api/transactions")
 def api_transactions(request: Request, account_id: int = 0, count: int = 10):
     user = _get_session_user(request)

@@ -39,10 +39,22 @@
 
     <!-- Profile avatar + dropdown -->
     <div class="nav-corner-wrap" id="profile-wrap">
-      <button class="nav-avatar" id="nav-profile-btn" aria-label="Profile" aria-haspopup="true" aria-expanded="false">A</button>
-      <div class="nav-dropdown" id="profile-dropdown" hidden>
-        <button class="dropdown-item" disabled>Settings</button>
-        <a class="dropdown-item dropdown-signout" href="/auth/logout">Sign out</a>
+      <button class="nav-avatar" id="nav-profile-btn" aria-label="Profile" aria-haspopup="true" aria-expanded="false">
+        A
+        <span class="notif-badge" id="notif-badge" hidden></span>
+      </button>
+      <div class="nav-dropdown notif-dropdown" id="profile-dropdown" hidden>
+        <div class="notif-dropdown-header">
+          <span class="notif-dropdown-title">Notifications</span>
+          <button class="notif-clear-btn" id="notif-clear-btn" aria-label="Clear all notifications">Clear all</button>
+        </div>
+        <div id="notif-list" class="notif-list">
+          <div class="notif-empty">No notifications</div>
+        </div>
+        <div class="notif-dropdown-footer">
+          <button class="dropdown-item" disabled>Settings</button>
+          <a class="dropdown-item dropdown-signout" href="/auth/logout">Sign out</a>
+        </div>
       </div>
     </div>
 
@@ -80,8 +92,8 @@
         </div>
         <div class="dropdown-label" style="margin-top:10px">Speech</div>
         <div class="dropdown-group" role="group" aria-label="Speech output">
-          <button class="speech-btn active" id="btn-speech-on" aria-pressed="true">On</button>
-          <button class="speech-btn" id="btn-speech-off" aria-pressed="false">Off</button>
+          <button class="speech-btn" id="btn-speech-on" aria-pressed="false">On</button>
+          <button class="speech-btn active" id="btn-speech-off" aria-pressed="true">Off</button>
         </div>
         <div class="dropdown-label" style="margin-top:10px">Language</div>
         <div class="dropdown-group" role="group" aria-label="Language">

@@ -157,7 +157,7 @@ let currentMode = 'default';
 let currentLang = 'en';
 let voiceMode   = false;   // user has voice mode ON (persists, gates TTS)
 let isListening = false;   // mic is currently open (transient)
-let ttsEnabled  = true;    // speech output on/off toggle
+let ttsEnabled  = false;   // speech output on/off toggle (off by default)
 
 // ── Page Renderers ────────────────────────────────────────────
 
@@ -1089,6 +1089,8 @@ async function sendMessage(query) {
       navigateTo(data.navigate_to);
     }
 
+    const hasHighlight = data.highlight_elements?.length > 0;
+
     // Highlight elements — orchestrator navigates to correct page per step
     setTimeout(() => {
       highlightElements(data.highlight_elements || [], data.response, data.steps || []);
@@ -1099,9 +1101,9 @@ async function sendMessage(query) {
       setTimeout(() => executeActions(data.actions), 500);
     }
 
-    // Always speak response; stop mic first to prevent feedback loop
-    if (data.speak !== false) {
-      const ttsText = data.response + (data.steps?.length ? '. ' + data.steps.join('. ') : '');
+    // When highlight active, orchestrator speaks each step — skip chatbot reply to avoid overlap
+    if (data.speak !== false && !hasHighlight) {
+      const ttsText = data.response;
       if (isListening) {
         stopVoiceCapture();
         setTimeout(() => speak(ttsText), 250);
@@ -1478,6 +1480,70 @@ function closeTxnDetail() {
   document.getElementById('txn-sheet').classList.remove('visible');
 }
 
+// ── Notification centre ───────────────────────────────────────
+
+const _notifCentre = [];  // { icon, title, msg, time, action? }
+
+function _notifTimeAgo(isoStr) {
+  if (!isoStr) return '';
+  const diff = Date.now() - new Date(isoStr).getTime();
+  const m = Math.floor(diff / 60000);
+  if (m < 1)  return 'Just now';
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  return `${Math.floor(h / 24)}d ago`;
+}
+
+function _renderNotifList() {
+  const list = document.getElementById('notif-list');
+  const badge = document.getElementById('notif-badge');
+  if (!list) return;
+  if (!_notifCentre.length) {
+    list.innerHTML = '<div class="notif-empty">No notifications</div>';
+    if (badge) badge.hidden = true;
+    return;
+  }
+  list.innerHTML = _notifCentre.map((n, i) => `
+    <div class="notif-item" data-idx="${i}">
+      <div class="notif-item-icon">${n.icon}</div>
+      <div class="notif-item-body">
+        <div class="notif-item-title">${n.title}</div>
+        <div class="notif-item-msg">${n.msg}</div>
+        ${n.time ? `<div class="notif-item-time">${n.time}</div>` : ''}
+        ${n.action ? `<button class="notif-item-action" onclick="${n.action}">Pay back</button>` : ''}
+      </div>
+    </div>`).join('');
+  if (badge) badge.hidden = false;
+}
+
+function addNotification(icon, title, msg, time = '', action = '') {
+  _notifCentre.unshift({ icon, title, msg, time, action });
+  _renderNotifList();
+}
+
+async function loadReceivedRequests() {
+  try {
+    const res = await fetch('/api/requests-received');
+    const data = await res.json();
+    if (data.mock || !data.requests?.length) return;
+    for (const r of data.requests) {
+      if (r.status !== 'PENDING') continue;
+      const name = resolveFullName(r.requester);
+      const iban = resolveIban(r.requester);
+      const amt  = `€${parseFloat(r.amount).toFixed(2)}`;
+      const desc = r.description ? ` — "${r.description}"` : '';
+      const time = _notifTimeAgo(r.created);
+      const action = iban
+        ? `prefillRecipient('${name.replace(/'/g,"\\'")}','${iban}');navigateTo('pay');document.getElementById('profile-dropdown').hidden=true;`
+        : `navigateTo('pay');document.getElementById('profile-dropdown').hidden=true;`;
+      addNotification('💸', `${name} requested ${amt}`, `Payment request${desc}`, time, action);
+    }
+  } catch (e) {
+    console.warn('loadReceivedRequests failed:', e);
+  }
+}
+
 // ── Push notification banner ──────────────────────────────────
 
 const PUSH_NOTIFICATIONS = {
@@ -1541,6 +1607,7 @@ function _showNextNotif() {
 
   banner.classList.add('visible');
   if (notif.confetti) triggerConfetti();
+  addNotification(notif.icon, notif.title, notif.message, 'Just now');
 
   clearTimeout(_notifTimer);
   _notifTimer = setTimeout(dismissBanner, notif.duration);
@@ -1812,8 +1879,10 @@ async function init() {
     bunqState.userName = user.name;
     const avatar = document.querySelector('.nav-avatar');
     if (avatar) {
+      const badge = document.getElementById('notif-badge');
       avatar.textContent = user.name.charAt(0);
       avatar.title = user.name;
+      if (badge) avatar.appendChild(badge);
     }
   } catch (e) {
     window.location.href = '/login';
@@ -1861,10 +1930,16 @@ async function init() {
   const bannerClose = document.getElementById('push-banner-close');
   if (bannerClose) bannerClose.addEventListener('click', dismissBanner);
 
+  document.getElementById('notif-clear-btn')?.addEventListener('click', () => {
+    _notifCentre.length = 0;
+    _renderNotifList();
+  });
+
   navigateTo('home');
   loadBunqData();
   registerPushFilter();
   checkDateNotifications();
+  loadReceivedRequests();
 }
 
 // Redirect to login on any 401 — return never-resolving promise so caller never runs (H2)

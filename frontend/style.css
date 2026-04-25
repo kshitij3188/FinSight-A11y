@@ -1067,6 +1067,49 @@ button:focus-visible, input:focus-visible, [tabindex]:focus-visible {
 }
 .nav-dropdown-right { left: auto; right: 0; min-width: 160px; }
 
+/* Notification dropdown */
+.notif-dropdown { min-width: 280px; max-width: 300px; padding: 0; overflow: hidden; }
+.notif-dropdown-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 14px 8px;
+  border-bottom: 1px solid #2C2C2E;
+}
+.notif-dropdown-title { font-size: 13px; font-weight: 700; color: #E2E8F0; }
+.notif-clear-btn {
+  font-size: 11px; color: var(--bunq-green); background: none; border: none;
+  cursor: pointer; padding: 2px 4px; border-radius: 4px;
+}
+.notif-clear-btn:hover { background: rgba(48,209,88,0.1); }
+.notif-list { max-height: 280px; overflow-y: auto; padding: 6px; }
+.notif-empty { font-size: 12px; color: #48484A; text-align: center; padding: 20px 0; }
+.notif-item {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 9px 10px; border-radius: 8px;
+  transition: background 0.12s; cursor: default;
+}
+.notif-item:hover { background: rgba(255,255,255,0.05); }
+.notif-item-icon { font-size: 18px; flex-shrink: 0; margin-top: 1px; }
+.notif-item-body { flex: 1; min-width: 0; }
+.notif-item-title { font-size: 12px; font-weight: 600; color: #E2E8F0; margin-bottom: 2px; }
+.notif-item-msg { font-size: 11px; color: #8E8E93; line-height: 1.4; }
+.notif-item-time { font-size: 10px; color: #48484A; margin-top: 2px; }
+.notif-item-action {
+  font-size: 11px; font-weight: 600; color: var(--bunq-green);
+  background: rgba(48,209,88,0.1); border: none; border-radius: 6px;
+  padding: 4px 8px; cursor: pointer; margin-top: 5px; display: inline-block;
+}
+.notif-item-action:hover { background: rgba(48,209,88,0.2); }
+.notif-item + .notif-item { border-top: 1px solid #2C2C2E; }
+.notif-dropdown-footer { border-top: 1px solid #2C2C2E; padding: 4px 6px; }
+
+/* Badge on avatar */
+.nav-avatar { position: relative; }
+.notif-badge {
+  position: absolute; top: -2px; right: -2px;
+  width: 8px; height: 8px; border-radius: 50%;
+  background: #FF453A; border: 2px solid #1C1C1E;
+}
+
 @keyframes dropdown-in {
   from { opacity: 0; transform: translateY(-6px) scale(0.97); }
   to   { opacity: 1; transform: translateY(0) scale(1); }

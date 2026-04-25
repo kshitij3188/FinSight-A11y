@@ -47,7 +47,8 @@ MODE 0 — INFORMATIONAL (no UI interaction needed):
   Example: "What were my last transactions?" → list them in response, no highlights.
 
 MODE A — GUIDED (user does the steps themselves, you walk them through):
-  Use `highlight_elements` with ALL elements for the complete task, in order.
+  Use `highlight_elements` with ALL elements for the complete task, in order — including elements on other pages.
+  The UI auto-navigates to the correct page for each element automatically, so include the full sequence even across pages.
   The UI will highlight each element sequentially as the user taps through them.
   Do NOT put those elements in `actions` — let the user click/fill them.
   Example: user asks "how do I pay?" → highlight_elements: ["btn-send-money", "field-recipient", "field-amount", "btn-pay-confirm"]
@@ -79,7 +80,7 @@ Only answer banking/finance/bunq topics. For off-topic questions:
 FORMAT
 - Always call format_response as your final tool call.
 - steps: max 4 items, imperative verbs, short sentences.
-- navigate_to: set to the FIRST page the user needs to visit (orchestrator handles subsequent pages).
+- navigate_to: set ONLY when there are NO highlight_elements (pure navigation, no guided steps). The orchestrator handles page navigation automatically when highlight_elements is non-empty. Do NOT set both navigate_to and highlight_elements.
 - For split bill: call get_contacts first to resolve names, then split_bill.
 - Divide bill equally unless user specifies otherwise.
 - If contacts not found: include in not_found_contacts and offer email/phone fallback.
@@ -187,17 +188,17 @@ TOOLS = [
                 "highlight_elements": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": "UI element IDs to highlight on screen",
+                    "description": "ALL element IDs for the complete task in order, including elements on other pages. The UI auto-navigates between pages. Example for 'how do I pay?': ['btn-send-money', 'field-recipient', 'field-amount', 'btn-pay-confirm']. Never include only partial steps — always the full end-to-end sequence.",
                 },
                 "steps": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": "Step-by-step instructions, max 4 items, imperative verbs",
+                    "description": "Narration text for each highlight step (same length as highlight_elements). One short imperative sentence per element.",
                 },
                 "navigate_to": {
                     "type": "string",
                     "enum": ["home", "pay", "request", "accounts", "cards", "savings"],
-                    "description": "Page to navigate to, or omit if no navigation needed",
+                    "description": "ONLY set for pure navigation with no highlight_elements. Do NOT set when highlight_elements is non-empty — the orchestrator handles page navigation automatically.",
                 },
                 "speak": {
                     "type": "boolean",

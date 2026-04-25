@@ -111,6 +111,7 @@ let currentMode = 'default';
 let currentLang = 'en';
 let voiceMode   = false;   // user has voice mode ON (persists, gates TTS)
 let isListening = false;   // mic is currently open (transient)
+let ttsEnabled  = true;    // speech output on/off toggle
 
 // ── Page Renderers ────────────────────────────────────────────
 
@@ -391,24 +392,24 @@ function renderCards() {
     <div class="card">
       <div class="toggle-row">
         <div>
-          <div data-element-id="btn-freeze-card" class="toggle-label">Freeze Card</div>
+          <div class="toggle-label">Freeze Card</div>
           <div class="toggle-desc">Temporarily disable all payments</div>
         </div>
-        <div class="toggle off" role="switch" aria-checked="false" aria-label="Freeze card" tabindex="0" onclick="toggleSwitch(this)"></div>
+        <div data-element-id="btn-freeze-card" class="toggle off" role="switch" aria-checked="false" aria-label="Freeze card" tabindex="0" onclick="toggleSwitch(this)"></div>
       </div>
       <div class="toggle-row">
         <div>
-          <div data-element-id="toggle-online-payments" class="toggle-label">Online Payments</div>
+          <div class="toggle-label">Online Payments</div>
           <div class="toggle-desc">Allow payments on websites and apps</div>
         </div>
-        <div class="toggle" role="switch" aria-checked="true" aria-label="Online payments" tabindex="0" onclick="toggleSwitch(this)"></div>
+        <div data-element-id="toggle-online-payments" class="toggle" role="switch" aria-checked="true" aria-label="Online payments" tabindex="0" onclick="toggleSwitch(this)"></div>
       </div>
       <div class="toggle-row">
         <div>
-          <div data-element-id="toggle-contactless" class="toggle-label">Contactless</div>
+          <div class="toggle-label">Contactless</div>
           <div class="toggle-desc">Tap to pay at terminals</div>
         </div>
-        <div class="toggle" role="switch" aria-checked="true" aria-label="Contactless payments" tabindex="0" onclick="toggleSwitch(this)"></div>
+        <div data-element-id="toggle-contactless" class="toggle" role="switch" aria-checked="true" aria-label="Contactless payments" tabindex="0" onclick="toggleSwitch(this)"></div>
       </div>
     </div>
 
@@ -427,7 +428,7 @@ function renderSavings() {
     <div data-element-id="savings-pot" class="savings-pot" role="region" aria-label="Savings pot">
       <div class="savings-pot-name">Holiday Fund 🌴</div>
       <div class="savings-pot-amount" aria-label="Saved 500 euros">€500.00</div>
-      <div class="savings-pot-goal">Goal: €1,000</div>
+      <div data-element-id="savings-goal-amount" class="savings-pot-goal">Goal: €1,000</div>
       <div data-element-id="savings-progress-bar" class="savings-progress-bar" role="progressbar" aria-valuenow="50" aria-valuemin="0" aria-valuemax="100" aria-label="50% of goal reached">
         <div class="savings-progress-fill" style="width:50%"></div>
       </div>
@@ -480,8 +481,8 @@ function navigateTo(pageId) {
   pageContent.setAttribute('tabindex', '-1');
   pageContent.focus({ preventScroll: true });
 
-  // Proactive guide for form pages when voice mode is on
-  if (voiceMode && ['pay', 'savings'].includes(pageId)) {
+  // Proactive guide for form pages when voice mode is on — skip if orchestrator is mid-sequence
+  if (voiceMode && ['pay', 'savings'].includes(pageId) && !Orchestrator.active) {
     setTimeout(() => {
       openWidget();
       sendMessage('Guide me through this page');
@@ -496,7 +497,7 @@ function navigateTo(pageId) {
 
 const ELEMENT_PAGE = {
   'balance-card': 'home', 'btn-send-money': 'home', 'btn-request': 'home',
-  'btn-topup': 'home', 'transaction-list': 'home',
+  'btn-topup': 'home', 'recent-transactions': 'home',
   'field-recipient': 'pay', 'field-amount': 'pay', 'field-description': 'pay',
   'btn-pay-confirm': 'pay', 'btn-pay-cancel': 'pay', 'recent-contacts': 'pay',
   'account-main-card': 'accounts', 'account-iban': 'accounts', 'account-bic': 'accounts',
@@ -911,15 +912,16 @@ async function sendMessage(query) {
       showMissingContactOptions(data.not_found_contacts, data.response);
     }
 
-    // Navigate if needed
-    if (data.navigate_to && data.navigate_to !== currentPage) {
+    // Navigate only when there are no highlight steps — orchestrator handles navigation internally
+    // when highlight_elements is non-empty, to avoid ping-pong page flips.
+    if (data.navigate_to && data.navigate_to !== currentPage && !data.highlight_elements?.length) {
       navigateTo(data.navigate_to);
     }
 
-    // Highlight elements (after navigation renders new DOM)
+    // Highlight elements — orchestrator navigates to correct page per step
     setTimeout(() => {
       highlightElements(data.highlight_elements || [], data.response, data.steps || []);
-    }, 300);
+    }, 100);
 
     // Execute AI-driven UI actions (fill fields, click buttons)
     if (data.actions?.length) {
@@ -930,10 +932,7 @@ async function sendMessage(query) {
     if (data.speak !== false) {
       const ttsText = data.response + (data.steps?.length ? '. ' + data.steps.join('. ') : '');
       if (isListening) {
-        isListening = false;
-        try { recognition.stop(); } catch (_) {}
-        _setMicUI(false);
-        // Chrome bug: recognition.stop() + speak() same tick → TTS silently dropped
+        stopVoiceCapture();
         setTimeout(() => speak(ttsText), 250);
       } else {
         speak(ttsText);
@@ -946,91 +945,66 @@ async function sendMessage(query) {
   }
 }
 
-// ── Text-to-Speech ────────────────────────────────────────────
+// ── Text-to-Speech (ElevenLabs) ───────────────────────────────
 
-function speak(text, onFinished) {
-  if (!('speechSynthesis' in window)) { if (onFinished) onFinished(); return; }
-  window.speechSynthesis.cancel();
-  const utterance = new SpeechSynthesisUtterance(text.replace(/[#*`]/g, ''));
-  utterance.rate  = currentMode === 'blind' ? 0.9 : 0.92;
-  utterance.pitch = 1.0;
-  utterance.lang  = currentLang === 'nl' ? 'nl-NL' : 'en-GB';
-  const voices    = window.speechSynthesis.getVoices();
-  const preferred = voices.find(v =>
-    v.name.includes('Samantha') || v.name.includes('Karen') || v.name.includes('Daniel')
-  );
-  if (preferred) utterance.voice = preferred;
-  utterance.onend = () => {
-    if (onFinished) onFinished();
-    // Auto-restart mic after TTS ends — fully interactive loop
-    if (voiceMode && !isListening) {
-      isListening = true;
-      recognition.lang = currentLang === 'nl' ? 'nl-NL' : 'en-US';
-      _setMicUI(true);
-      try { recognition.start(); } catch (_) {}
-    }
-  };
-  window.speechSynthesis.speak(utterance);
+let _currentAudio = null;
+let _ttsCtx = null;  // shared AudioContext — stays unlocked after first user gesture
+
+// Unlock AudioContext on first interaction so async TTS playback isn't blocked
+document.addEventListener('click', () => {
+  if (!_ttsCtx) _ttsCtx = new AudioContext();
+  if (_ttsCtx.state === 'suspended') _ttsCtx.resume();
+}, { passive: true });
+
+async function _getAudioCtx() {
+  if (!_ttsCtx) _ttsCtx = new AudioContext();
+  if (_ttsCtx.state === 'suspended') await _ttsCtx.resume();
+  return _ttsCtx;
 }
 
-// ── Voice Input ───────────────────────────────────────────────
-
-let recognition = null;
-
-(function initVoice() {
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR) {
-    micBtn.style.opacity = '0.4';
-    micBtn.title = 'Voice input not supported in this browser';
-    return;
+async function speak(text, onFinished) {
+  if (!ttsEnabled) { if (onFinished) onFinished(); return; }
+  if (_currentAudio) { _currentAudio.stop(); _currentAudio = null; }
+  try {
+    const resp = await fetch('/tts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: text.replace(/[#*`]/g, '') }),
+    });
+    if (!resp.ok) {
+      const err = await resp.text();
+      console.error('TTS error:', resp.status, err);
+      throw new Error('TTS failed');
+    }
+    const arrayBuffer = await resp.arrayBuffer();
+    const ctx = _audioCtx || await _getAudioCtx();  // prefer mic ctx (already unlocked)
+    const decoded = await ctx.decodeAudioData(arrayBuffer);
+    const source = ctx.createBufferSource();
+    source.buffer = decoded;
+    source.connect(ctx.destination);
+    _currentAudio = source;
+    source.onended = () => {
+      _currentAudio = null;
+      if (onFinished) onFinished();
+      if (voiceMode && !isListening) _restartMic();
+    };
+    source.start();
+  } catch (e) {
+    console.error('speak() failed:', e);
+    if (onFinished) onFinished();
+    if (voiceMode && !isListening) _restartMic();
   }
+}
 
-  recognition = new SR();
-  recognition.continuous     = true;
-  recognition.interimResults = true;
+// ── Voice Input (Groq Whisper via MediaRecorder) ──────────────
 
-  let silenceTimer    = null;
-  let finalTranscript = '';
-
-  recognition.onresult = e => {
-    let interim = '';
-    for (let i = e.resultIndex; i < e.results.length; i++) {
-      if (e.results[i].isFinal) {
-        finalTranscript += e.results[i][0].transcript + ' ';
-      } else {
-        interim += e.results[i][0].transcript;
-      }
-    }
-    // Show live text while speaking
-    chatInput.value = finalTranscript + interim;
-
-    // Send after 1.5s of silence
-    clearTimeout(silenceTimer);
-    silenceTimer = setTimeout(() => {
-      const text = finalTranscript.trim();
-      finalTranscript = '';
-      chatInput.value = '';
-      if (text) sendMessage(text);
-    }, 1500);
-  };
-
-  recognition.onend = () => {
-    // If voice mode still on, Chrome killed it — restart silently
-    if (voiceMode && isListening) {
-      try { recognition.start(); } catch (_) {}
-    } else {
-      isListening = false;
-      _setMicUI(false);
-    }
-  };
-
-  recognition.onerror = e => {
-    if (e.error === 'aborted') return;  // intentional stop — ignore
-    isListening = false;
-    _setMicUI(false);
-    if (e.error !== 'no-speech') addMessage('Voice error: ' + e.error, 'bot');
-  };
-})();
+let _micStream   = null;
+let _mediaRec    = null;
+let _audioChunks = [];
+let _audioCtx    = null;
+let _analyser    = null;
+let _silTimer    = null;
+let _monitoring  = false;
 
 function _setMicUI(on) {
   if (on) {
@@ -1044,25 +1018,106 @@ function _setMicUI(on) {
   }
 }
 
-function startVoiceMode() {
-  if (!recognition) { addMessage('Speech recognition not supported in this browser.', 'bot'); return; }
-  window.speechSynthesis.cancel();
-  voiceMode   = true;
+function _monitorSilence() {
+  _monitoring = true;
+  const buf = new Uint8Array(_analyser.fftSize);
+  function check() {
+    if (!_monitoring || !isListening) return;
+    _analyser.getByteTimeDomainData(buf);
+    const rms = Math.sqrt(buf.reduce((s, v) => s + (v - 128) ** 2, 0) / buf.length);
+    if (rms < 4) {
+      if (!_silTimer) {
+        _silTimer = setTimeout(() => {
+          if (isListening) stopVoiceCapture();
+        }, 1500);
+      }
+    } else {
+      clearTimeout(_silTimer);
+      _silTimer = null;
+    }
+    requestAnimationFrame(check);
+  }
+  check();
+}
+
+async function _sendAudio() {
+  const blob = new Blob(_audioChunks, { type: 'audio/webm' });
+  _audioChunks = [];
+  if (blob.size < 1000) {
+    if (voiceMode) _restartMic();
+    return;
+  }
+  chatInput.value = '…';
+  try {
+    const fd = new FormData();
+    fd.append('audio', blob, 'audio.webm');
+    const resp = await fetch('/stt', { method: 'POST', body: fd });
+    const { text } = await resp.json();
+    chatInput.value = '';
+    if (text && text.trim()) sendMessage(text.trim());
+    else if (voiceMode) _restartMic();
+  } catch (e) {
+    chatInput.value = '';
+    if (voiceMode) _restartMic();
+  }
+}
+
+function _startRecording() {
+  _audioChunks = [];
+  const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+    ? 'audio/webm;codecs=opus' : 'audio/webm';
+  _mediaRec = new MediaRecorder(_micStream, { mimeType });
+  _mediaRec.ondataavailable = e => { if (e.data.size) _audioChunks.push(e.data); };
+  _mediaRec.onstop = _sendAudio;
+  _mediaRec.start();
+  _monitorSilence();
+}
+
+function _restartMic() {
+  if (!voiceMode || !_micStream) return;
   isListening = true;
-  recognition.lang = currentLang === 'nl' ? 'nl-NL' : 'en-US';
   _setMicUI(true);
-  openWidget();
-  chatInput.value = '';
-  try { recognition.start(); } catch (e) {
-    voiceMode = false; isListening = false; _setMicUI(false);
+  _startRecording();
+}
+
+function stopVoiceCapture() {
+  _monitoring = false;
+  clearTimeout(_silTimer);
+  _silTimer = null;
+  isListening = false;
+  _setMicUI(false);
+  if (_mediaRec && _mediaRec.state !== 'inactive') {
+    _mediaRec.stop();
+  }
+}
+
+async function startVoiceMode() {
+  if (_micStream) {
+    voiceMode = true;
+    openWidget();
+    _restartMic();
+    return;
+  }
+  try {
+    _micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    _audioCtx  = new AudioContext();
+    _analyser  = _audioCtx.createAnalyser();
+    _analyser.fftSize = 256;
+    _audioCtx.createMediaStreamSource(_micStream).connect(_analyser);
+    voiceMode   = true;
+    isListening = true;
+    _setMicUI(true);
+    openWidget();
+    chatInput.value = '';
+    _startRecording();
+  } catch (e) {
+    addMessage('Microphone access denied. Please allow mic permission.', 'bot');
   }
 }
 
 function stopVoiceMode() {
-  voiceMode   = false;
-  isListening = false;
-  if (recognition) try { recognition.stop(); } catch (_) {}
-  _setMicUI(false);
+  voiceMode = false;
+  stopVoiceCapture();
 }
 
 micBtn.addEventListener('click', () => {
@@ -1092,7 +1147,7 @@ function toggleSwitch(el) {
 
 function setMode(mode) {
   currentMode = mode;
-  ['default', 'blind', 'low_vision', 'dyslexic'].forEach(m => document.body.classList.remove(`mode-${m}`));
+  ['default', 'blind', 'low_vision', 'dyslexic', 'colorblind'].forEach(m => document.body.classList.remove(`mode-${m}`));
   if (mode !== 'default') document.body.classList.add(`mode-${mode}`);
   document.querySelectorAll('.mode-btn').forEach(btn => {
     const active = btn.dataset.mode === mode;
@@ -1104,13 +1159,29 @@ function setMode(mode) {
 
 function setLang(lang) {
   currentLang = lang;
-  if (recognition) recognition.lang = lang === 'nl' ? 'nl-NL' : 'en-US';
+  // lang stored in currentLang; Groq STT uses server-side language detection
   document.querySelectorAll('.lang-btn').forEach(btn => {
     const active = btn.dataset.lang === lang;
     btn.classList.toggle('active', active);
     btn.setAttribute('aria-pressed', active);
   });
 }
+
+document.getElementById('btn-speech-on').addEventListener('click', () => {
+  ttsEnabled = true;
+  document.getElementById('btn-speech-on').classList.add('active');
+  document.getElementById('btn-speech-on').setAttribute('aria-pressed', true);
+  document.getElementById('btn-speech-off').classList.remove('active');
+  document.getElementById('btn-speech-off').setAttribute('aria-pressed', false);
+});
+document.getElementById('btn-speech-off').addEventListener('click', () => {
+  ttsEnabled = false;
+  if (_currentAudio) { try { _currentAudio.stop(); } catch(_){} _currentAudio = null; }
+  document.getElementById('btn-speech-off').classList.add('active');
+  document.getElementById('btn-speech-off').setAttribute('aria-pressed', true);
+  document.getElementById('btn-speech-on').classList.remove('active');
+  document.getElementById('btn-speech-on').setAttribute('aria-pressed', false);
+});
 
 // ── Nav click handlers ────────────────────────────────────────
 

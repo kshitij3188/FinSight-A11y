@@ -1073,38 +1073,60 @@ async function sendAttachment() {
   const contextText = chatInput.value.trim();
   const { objectUrl, base64, mediaType } = pendingAttachment;
 
-  if (contextText) addMessage(contextText, 'user');
+  addMessage(contextText || 'I uploaded a receipt.', 'user');
   chatInput.value = '';
   clearAttachment();
 
   const typingEl = showTyping();
 
   try {
-    const res = await fetch(`${API_BASE}/vision`, {
+    // Step 1: vision — extract receipt data
+    const vRes = await fetch(`${API_BASE}/vision`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ image_base64: base64, media_type: mediaType }),
     });
-
-    if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.detail || 'Vision error');
-    }
-
-    const data = await res.json();
+    if (!vRes.ok) { const e = await vRes.json(); throw new Error(e.detail || 'Vision error'); }
+    const data = await vRes.json();
     typingEl.remove();
     URL.revokeObjectURL(objectUrl);
 
+    // Step 2: always render receipt card for user verification
     const card = renderReceiptCard(data);
     messagesEl.appendChild(card);
     messagesEl.scrollTop = messagesEl.scrollHeight;
 
-    // Inject receipt data into history so Claude can reference it in follow-up turns
+    // Step 3: inject receipt into history
     const receiptContext = `Receipt from ${data.merchant}: ${data.currency} ${data.amount?.toFixed(2)}, category: ${data.category}, date: ${data.date || 'unknown'}, items: ${data.items?.join(', ') || 'none'}, payment: ${data.payment_method}.`;
     conversationHistory.push({ role: 'user',      content: contextText || 'I uploaded a receipt.' });
     conversationHistory.push({ role: 'assistant', content: receiptContext });
 
-    speak(`Receipt from ${data.merchant}. Total ${data.currency} ${data.amount?.toFixed(2)}. Category: ${data.category}.`);
+    // Step 4: if user gave context, call guide with receipt in history so it acts on intent
+    if (contextText) {
+      const typingEl2 = showTyping();
+      const gRes = await fetch(`${API_BASE}/guide`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: contextText,
+          page_id: currentPage,
+          page_state: capturePageState(),
+          history: getHistoryPayload(),
+        }),
+      });
+      typingEl2.remove();
+      if (gRes.ok) {
+        const gData = await gRes.json();
+        addMessage(gData.response, 'bot', gData.steps);
+        conversationHistory.push({ role: 'user',      content: contextText });
+        conversationHistory.push({ role: 'assistant', content: gData.response });
+        if (gData.navigate_to && gData.navigate_to !== currentPage) navigateTo(gData.navigate_to);
+        if (gData.actions?.length) setTimeout(() => executeActions(gData.actions), 400);
+        if (gData.speak !== false) speak(gData.response);
+      }
+    } else {
+      speak(`Receipt from ${data.merchant}. Total ${data.currency} ${data.amount?.toFixed(2)}.`);
+    }
 
   } catch (err) {
     typingEl.remove();

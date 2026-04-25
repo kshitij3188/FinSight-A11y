@@ -532,12 +532,13 @@ widgetToggle.addEventListener('keydown', e => {
   if (e.key === 'Enter' || e.key === ' ') widgetToggle.click();
 });
 
-// Quick prompts
+// Quick prompts — fill input so user can edit placeholders before sending
 document.querySelectorAll('.quick-prompt').forEach(btn => {
   btn.addEventListener('click', () => {
-    const q = btn.dataset.q;
     widgetPanel.classList.add('open');
-    sendMessage(q);
+    chatInput.value = btn.dataset.q;
+    chatInput.focus();
+    chatInput.setSelectionRange(chatInput.value.length, chatInput.value.length);
   });
 });
 
@@ -646,6 +647,10 @@ async function executeActions(actions) {
 
 async function sendMessage(query) {
   if (!query.trim()) return;
+
+  // Hide suggestions after first message
+  const quickPromptsEl = document.getElementById('quick-prompts');
+  if (quickPromptsEl) quickPromptsEl.hidden = true;
 
   addMessage(query, 'user');
   const typingEl = showTyping();

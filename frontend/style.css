@@ -509,13 +509,22 @@ body {
   background: var(--card);
   border-radius: 20px;
   box-shadow: var(--shadow-lg);
-  display: none;
+  display: flex;
   flex-direction: column;
   overflow: hidden;
   border: 1.5px solid var(--border);
   max-height: 520px;
+  opacity: 0;
+  pointer-events: none;
+  transform: scale(0.95) translateY(10px);
+  transform-origin: bottom right;
+  transition: opacity 0.2s ease, transform 0.2s ease;
 }
-.widget-panel.open { display: flex; }
+.widget-panel.open {
+  opacity: 1;
+  pointer-events: auto;
+  transform: scale(1) translateY(0);
+}
 
 .widget-header {
   background: var(--bunq-navy);
@@ -553,6 +562,11 @@ body {
   border-radius: 14px;
   font-size: 14px;
   line-height: 1.4;
+  animation: msg-in 0.22s ease-out;
+}
+@keyframes msg-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 .msg.bot {
   background: var(--surface);
@@ -688,6 +702,7 @@ body {
   flex-wrap: wrap;
   gap: 6px;
 }
+.quick-prompts[hidden] { display: none; }
 .quick-prompt {
   background: rgba(0,207,180,0.1);
   border: 1px solid rgba(0,207,180,0.3);

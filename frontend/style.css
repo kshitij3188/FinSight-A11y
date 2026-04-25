@@ -600,6 +600,7 @@ body {
 }
 .widget-mini-icon { color: var(--bunq-green); font-size: 15px; font-weight: 900; flex-shrink: 0; }
 .widget-mini-text { font-size: 12px; font-weight: 600; color: var(--text-primary); line-height: 1.4; flex: 1; min-width: 0; white-space: normal; overflow-wrap: break-word; word-break: break-word; }
+.widget-mini-hint { font-size: 10px; color: var(--text-secondary); flex-shrink: 0; }
 .widget-mini-bar:hover { background: rgba(44, 44, 46, 0.95); }
 
 #ai-widget.widget-minimized {

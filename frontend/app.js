@@ -460,7 +460,8 @@ function renderSavings() {
 
 function navigateTo(pageId) {
   if (!PAGES[pageId]) return;
-  if (_highlightQueue.length > 0) _clearHighlightVisuals(); else clearHighlights();
+
+  _clearHighlightVisuals();
   currentPage = pageId;
 
   document.querySelectorAll('.nav-pill').forEach(btn => {
@@ -488,77 +489,113 @@ function navigateTo(pageId) {
   }
 }
 
-// ── Highlight System (Lighthouse) ────────────────────────────
+// ── Highlight Orchestrator ────────────────────────────────────
+// Manages sequential highlight steps. User advances by tapping
+// the highlighted element or the mini bar pill. Any other tap cancels.
+// Navigates to the correct page when the next step lives elsewhere.
+
+const ELEMENT_PAGE = {
+  'balance-card': 'home', 'btn-send-money': 'home', 'btn-request': 'home',
+  'btn-topup': 'home', 'transaction-list': 'home',
+  'field-recipient': 'pay', 'field-amount': 'pay', 'field-description': 'pay',
+  'btn-pay-confirm': 'pay', 'btn-pay-cancel': 'pay', 'recent-contacts': 'pay',
+  'account-main-card': 'accounts', 'account-iban': 'accounts', 'account-bic': 'accounts',
+  'btn-copy-iban': 'accounts', 'btn-new-account': 'accounts', 'account-savings-card': 'accounts',
+  'card-display': 'cards', 'btn-freeze-card': 'cards', 'btn-view-pin': 'cards',
+  'btn-card-limits': 'cards', 'toggle-online-payments': 'cards', 'toggle-contactless': 'cards',
+  'btn-order-card': 'cards',
+  'savings-pot': 'savings', 'savings-progress-bar': 'savings', 'savings-goal-amount': 'savings',
+  'btn-add-savings': 'savings', 'btn-auto-save': 'savings', 'massinterest-rate': 'savings',
+  'btn-set-goal': 'savings',
+};
+
+const Orchestrator = {
+  steps: [],
+  index: 0,
+  active: false,
+  _currentEl: null,
+
+  start(ids, narrations) {
+    this.reset();
+    this.steps = ids.map((id, i) => ({ id, narration: narrations[i] || '' }));
+    this.active = true;
+    this._run();
+  },
+
+  advance() {
+    if (!this.active) return;
+    this._currentEl = null;
+    _clearHighlightVisuals();
+    this.index++;
+    this._run();
+  },
+
+  reset() {
+    this.active = false;
+    this.steps = [];
+    this.index = 0;
+    this._currentEl = null;
+  },
+
+  _run() {
+    if (!this.active || this.index >= this.steps.length) {
+      this.reset();
+      _clearHighlightVisuals();
+      restoreWidget();
+      return;
+    }
+
+    const step = this.steps[this.index];
+    const total = this.steps.length;
+    const label = total > 1 ? `${step.narration} (${this.index + 1}/${total})` : step.narration;
+
+    let el = document.querySelector(`[data-element-id="${step.id}"]`);
+    if (!el) {
+      const targetPage = ELEMENT_PAGE[step.id];
+      if (targetPage && targetPage !== currentPage) {
+        navigateTo(targetPage);
+        el = document.querySelector(`[data-element-id="${step.id}"]`);
+      }
+    }
+    if (!el) { this.index++; this._run(); return; }
+
+    document.getElementById('widget-mini-text').textContent = label || step.id;
+    this._currentEl = el;
+    this._highlight(el, step);
+  },
+
+  _highlight(el, step) {
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    el.classList.add('lh-target');
+    document.getElementById('lh-overlay').classList.add('active');
+    _moveMascot(el);
+    if (step.narration) speak(step.narration);
+
+    setTimeout(() => {
+      const existing = document.getElementById('ai-arrow-label');
+      if (existing) existing.remove();
+      const frame = document.querySelector('.phone-frame');
+      if (!frame) return;
+      const rect = el.getBoundingClientRect();
+      const frameRect = frame.getBoundingClientRect();
+      const arrow = document.createElement('div');
+      arrow.className = 'ai-arrow';
+      arrow.textContent = '← Here';
+      arrow.style.top = `${rect.top - frameRect.top - 32}px`;
+      arrow.style.left = `${rect.right - frameRect.left + 8}px`;
+      arrow.id = 'ai-arrow-label';
+      frame.appendChild(arrow);
+    }, 300);
+
+    el.addEventListener('click', () => this.advance(), { once: true });
+  },
+};
 
 function highlightElements(ids, narration, steps) {
-  console.log('[HL] highlightElements ids=', ids, 'steps=', steps);
-  clearHighlights();
-  if (!ids || ids.length === 0) return;
-
-  const firstEl = document.querySelector(`[data-element-id="${ids[0]}"]`);
-  if (firstEl) announce(`Highlighted: ${firstEl.getAttribute('aria-label') || ids[0]}`);
-
+  if (!ids || ids.length === 0) { clearHighlights(); return; }
   const narrations = (steps && steps.length) ? steps : ids.map(() => narration || '');
-  _highlightQueue = ids.map((id, i) => ({ id, narration: narrations[i] || '' }));
-  _highlightIndex = 0;
-
-  const total = _highlightQueue.length;
-  const firstNarration = _highlightQueue[0].narration;
-  const label = total > 1 ? `${firstNarration} (1/${total})` : firstNarration;
-
-  minimizeWidget(label || ids[0]);
-  _lighthouseHighlightStep(_highlightQueue[0].id, firstNarration);
-}
-
-function _advanceHighlight() {
-  console.log('[HL] _advanceHighlight called, index=', _highlightIndex, 'queue=', _highlightQueue.map(x=>x.id));
-  if (_highlightTimer) { clearTimeout(_highlightTimer); _highlightTimer = null; }
-  document.querySelectorAll('.lh-target').forEach(el => el.classList.remove('lh-target'));
-  document.getElementById('lh-overlay').classList.remove('active');
-  _hideMascot();
-  const arrow = document.getElementById('ai-arrow-label');
-  if (arrow) arrow.remove();
-
-  _highlightIndex++;
-  console.log('[HL] after increment, index=', _highlightIndex, 'queueLen=', _highlightQueue.length);
-  if (_highlightIndex < _highlightQueue.length) {
-    const { id, narration } = _highlightQueue[_highlightIndex];
-    const total = _highlightQueue.length;
-    const label = total > 1 ? `${narration} (${_highlightIndex + 1}/${total})` : narration;
-    document.getElementById('widget-mini-text').textContent = label || id;
-    _lighthouseHighlightStep(id, narration);
-  } else {
-    _highlightQueue = [];
-    _highlightIndex = 0;
-    clearHighlights();
-  }
-}
-
-function _lighthouseHighlightStep(id, narration) {
-  const el = document.querySelector(`[data-element-id="${id}"]`);
-  if (!el) { _advanceHighlight(); return; }
-
-  el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  el.classList.add('lh-target');
-  document.getElementById('lh-overlay').classList.add('active');
-  _moveMascot(el);
-  if (narration) speak(narration);
-
-  setTimeout(() => {
-    const rect = el.getBoundingClientRect();
-    const frame = document.querySelector('.phone-frame');
-    const frameRect = frame.getBoundingClientRect();
-    const arrow = document.createElement('div');
-    arrow.className = 'ai-arrow';
-    arrow.textContent = '← Here';
-    arrow.style.top = `${rect.top - frameRect.top - 32}px`;
-    arrow.style.left = `${rect.right - frameRect.left + 8}px`;
-    arrow.id = 'ai-arrow-label';
-    frame.appendChild(arrow);
-  }, 300);
-
-  el.addEventListener('click', () => _advanceHighlight(), { once: true });
-  _highlightTimer = setTimeout(_advanceHighlight, 15000);
+  minimizeWidget(narrations[0] || ids[0]);
+  Orchestrator.start(ids, narrations);
 }
 
 function _clearHighlightVisuals() {
@@ -573,10 +610,7 @@ function _clearHighlightVisuals() {
 }
 
 function clearHighlights() {
-  console.log('[HL] clearHighlights called from:', new Error().stack.split('\n')[2]);
-  if (_highlightTimer) { clearTimeout(_highlightTimer); _highlightTimer = null; }
-  _highlightQueue = [];
-  _highlightIndex = 0;
+  Orchestrator.reset();
   _clearHighlightVisuals();
   restoreWidget();
 }
@@ -661,9 +695,21 @@ function getHistoryPayload() {
 
 const aiWidget = document.getElementById('ai-widget');
 let _widgetWasOpen = false;
-let _highlightQueue = [];
-let _highlightIndex = 0;
-let _highlightTimer = null;
+let _lastClickedEl = null;
+document.addEventListener('click', e => {
+  _lastClickedEl = e.target;
+  if (Orchestrator.active) {
+    const miniBar = document.getElementById('widget-mini-bar');
+    const onCurrentEl = Orchestrator._currentEl &&
+      (Orchestrator._currentEl === e.target || Orchestrator._currentEl.contains(e.target));
+    const onMiniBar = miniBar && (miniBar === e.target || miniBar.contains(e.target));
+    if (!onCurrentEl && !onMiniBar) {
+      Orchestrator.reset();
+      _clearHighlightVisuals();
+      restoreWidget();
+    }
+  }
+}, { capture: true });
 
 function openWidget() {
   widgetPanel.classList.add('open');
@@ -684,6 +730,7 @@ function minimizeWidget(shortText) {
   _widgetWasOpen = widgetPanel.classList.contains('open');
   widgetPanel.classList.remove('open');
   widgetToggle.classList.add('hidden');
+  widgetToggle.style.display = 'none';
   aiWidget.classList.remove('widget-open');
   aiWidget.classList.add('widget-minimized');
   document.getElementById('widget-mini-text').textContent = shortText;
@@ -692,6 +739,7 @@ function minimizeWidget(shortText) {
 function restoreWidget() {
   if (!aiWidget.classList.contains('widget-minimized')) return;
   aiWidget.classList.remove('widget-minimized');
+  widgetToggle.style.display = '';
   if (_widgetWasOpen) {
     widgetPanel.classList.add('open');
     aiWidget.classList.add('widget-open');
@@ -705,11 +753,11 @@ widgetToggle.addEventListener('click', openWidget);
 widgetToggle.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') openWidget(); });
 document.getElementById('widget-close-btn').addEventListener('click', closeWidget);
 document.getElementById('widget-mini-bar').addEventListener('click', () => {
-  if (_highlightQueue.length > 0) _advanceHighlight(); else restoreWidget();
+  if (Orchestrator.active) Orchestrator.advance(); else restoreWidget();
 });
 document.getElementById('widget-mini-bar').addEventListener('keydown', e => {
   if (e.key === 'Enter' || e.key === ' ') {
-    if (_highlightQueue.length > 0) _advanceHighlight(); else restoreWidget();
+    if (Orchestrator.active) Orchestrator.advance(); else restoreWidget();
   }
 });
 
@@ -804,6 +852,8 @@ async function executeActions(actions) {
     await _sleep(600);
 
     if (action.type === 'click') {
+      // If orchestrator is guiding user to this element, skip auto-click — let user tap it
+      if (el.classList.contains('lh-target')) { el.classList.remove('lh-target'); continue; }
       el.click();
     } else if (action.type === 'fill') {
       const input = el.querySelector('input, textarea') || (el.matches('input, textarea') ? el : null);

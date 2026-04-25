@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FinSight-A11y Architecture Flowchart</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <style>
+        body {
+            background-color: #1a192b;
+            color: white;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            min-height: 100vh;
+            margin: 0;
+            padding: 4rem;
+            font-family: sans-serif;
+            overflow: auto;
+        }
+
+        .mermaid {
+            background-color: #1a192b;
+            padding: 2rem;
+            border-radius: 8px;
+            width: 100%;
+            display: flex;
+            justify-content: center;
+        }
+
+        /* Force the SVG to be significantly larger */
+        .mermaid svg {
+            min-width: 1000px !important;
+            height: auto;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="mermaid">
+        %%{init: {'theme': 'base', 'themeVariables': { 'darkMode': true, 'background': '#1a192b', 'primaryTextColor':
+        '#ffffff', 'lineColor': '#8a8eac', 'edgeLabelBackground': '#1a192b'}}}%%
+        flowchart TD
+            %% Global Styles
+            classDef user fill:#393c6f,stroke:none,color:#fff,rx:10,ry:10
+            classDef frontend fill:#1a192b,stroke:#8a8eac,stroke-width:2px,color:#fff,rx:5,ry:5
+            classDef process fill:#2d2931,stroke:#c4714b,stroke-width:2px,color:#fff,rx:4px,ry:4px
+            classDef ai fill:#2d1b36,stroke:#6b437a,stroke-width:2px,color:#fff
+            classDef bunq fill:#172554,stroke:#3b82f6,stroke-width:2px,color:#fff
+            classDef db fill:#363121,stroke:#a68a36,stroke-width:2px,color:#fff
+            classDef ext fill:#1c1a36,stroke:#4a4282,stroke-width:2px,color:#fff,stroke-dasharray: 5 5
+
+            User(["👤 User (Low Vision / Accessibility First)"]):::user
+
+            subgraph Client ["Frontend (Browser / Mobile)"]
+                direction TB
+                Voice["🎙️ Voice Input/Output"]:::frontend
+                Camera["📷 Receipt Scanner"]:::frontend
+                UI["💻 SPA Interface"]:::frontend
+            end
+
+            User --> Client
+
+            Groq["👂 Groq Whisper API (External STT)"]:::ext
+            Voice -->|Audio Stream| Groq
+
+            subgraph AWS ["Backend Server (AWS EC2 - c7i-flex.large)"]
+                direction TB
+                API["⚡ FastAPI Application Hub"]:::process
+                
+                subgraph AI_RAG ["AI & RAG Subsystem"]
+                    direction TB
+                    Agent{"🧠 Core Logic / AI Agent"}:::ai
+                    Embed["📊 Embeddings (BAAI/bge-base)"]:::ai
+                    VectorDB[("💾 Chroma Vector DB")]:::db
+                    
+                    Agent <-->|"Context Query"| Embed
+                    Embed <-->|"Search"| VectorDB
+                end
+                
+                subgraph BunqHub ["Bunq API Wrapper"]
+                    direction TB
+                    Auth["🔒 Session Auth"]:::bunq
+                    Ops{"⚙️ Execute Operation"}:::bunq
+                    
+                    Pay["💸 Send Payment"]:::bunq
+                    Split["✂️ Split Bill"]:::bunq
+                    Link["🔗 Payment Link"]:::bunq
+                    Fetch["📋 Fetch Accounts / Txns"]:::bunq
+                    
+                    Auth --> Ops
+                    Ops -.-> Pay
+                    Ops -.-> Split
+                    Ops -.-> Link
+                    Ops -.-> Fetch
+                end
+                
+                API --> Agent
+                Agent --> Auth
+            end
+
+            Groq -->|Transcribed Text| API
+            Camera -->|Image Upload| API
+            UI -->|HTTP Requests| API
+
+            Anthropic["🤖 Anthropic API (Claude 3.5 Sonnet)"]:::ext
+            Agent <-->|Requires Vision/Logic| Anthropic
+            
+            EdgeTTS["🗣️ Microsoft Edge TTS (External)"]:::ext
+            Agent -->|Generates Audio| EdgeTTS
+            EdgeTTS -->|Audio Playback| Voice
+            
+            BunqBank(["🏦 bunq Core Banking System (External)"]):::ext
+            
+            Pay -->|REST API| BunqBank
+            Split -->|REST API| BunqBank
+            Link -->|REST API| BunqBank
+            Fetch -->|REST API| BunqBank
+            BunqBank -->|JSON Response| Ops
+
+            %% Subgraph Styling
+            style Client fill:none,stroke:#8a8eac,stroke-width:2px,stroke-dasharray: 5 5,rx:10,ry:10
+            style AWS fill:#221f2e,stroke:#4a4282,stroke-width:2px,rx:10,ry:10
+            style AI_RAG fill:#2a1c30,stroke:#6b437a,stroke-width:1px,rx:8,ry:8
+            style BunqHub fill:#111b3d,stroke:#3b82f6,stroke-width:1px,rx:8,ry:8
+    </div>
+
+    <script>
+        mermaid.initialize({ startOnLoad: true });
+    </script>
+</body>
+
+</html>

@@ -32,64 +32,74 @@ flowchart TD
     User(["👤 User (Low Vision / Accessibility First)"]):::user
 
     subgraph Client ["Frontend (Browser / Mobile)"]
-        UI["💻 SPA Interface"]:::frontend
+        direction TB
         Voice["🎙️ Voice Input/Output"]:::frontend
         Camera["📷 Receipt Scanner"]:::frontend
+        UI["💻 SPA Interface"]:::frontend
     end
 
+    User --> Client
+
+    Groq["👂 Groq Whisper API (External STT)"]:::ext
+    Voice -->|Audio Stream| Groq
+
     subgraph AWS ["Backend Server (AWS EC2 - c7i-flex.large)"]
+        direction TB
         API["⚡ FastAPI Application Hub"]:::process
         
         subgraph AI_RAG ["AI & RAG Subsystem"]
+            direction TB
             Agent{"🧠 Core Logic / AI Agent"}:::ai
-            Embed["📊 Embeddings Model (BAAI/bge-base)"]:::ai
-            VectorDB[("💾 Chroma Vector DB (Help Docs)")]:::db
+            Embed["📊 Embeddings (BAAI/bge-base)"]:::ai
+            VectorDB[("💾 Chroma Vector DB")]:::db
             
-            Agent <-->|"Queries Context"| Embed
-            Embed <-->|"Vector Search"| VectorDB
+            Agent <-->|"Context Query"| Embed
+            Embed <-->|"Search"| VectorDB
         end
         
         subgraph BunqHub ["Bunq API Wrapper"]
+            direction TB
             Auth["🔒 Session Auth"]:::bunq
             Ops{"⚙️ Execute Operation"}:::bunq
             
-            Ops -.-> Pay["💸 Send Payment"]:::bunq
-            Ops -.-> Split["✂️ Split Bill"]:::bunq
-            Ops -.-> Link["🔗 Payment Link"]:::bunq
-            Ops -.-> Fetch["📋 Fetch Accounts / Txns"]:::bunq
+            Pay["💸 Send Payment"]:::bunq
+            Split["✂️ Split Bill"]:::bunq
+            Link["🔗 Payment Link"]:::bunq
+            Fetch["📋 Fetch Accounts / Txns"]:::bunq
+            
+            Auth --> Ops
+            Ops -.-> Pay
+            Ops -.-> Split
+            Ops -.-> Link
+            Ops -.-> Fetch
         end
+        
+        API --> Agent
+        Agent --> Auth
     end
 
-    subgraph External ["External Services"]
-        Anthropic["🤖 Anthropic API (Claude 3.5 Sonnet)"]:::ext
-        Groq["👂 Groq Whisper API (STT)"]:::ext
-        EdgeTTS["🗣️ Microsoft Edge TTS"]:::ext
-        BunqBank(["🏦 bunq Core Banking System"]):::ext
-    end
-
-    %% Connections
-    User -->|Interacts| Client
-    UI -->|HTTP Requests| API
-    Voice -->|Audio Stream| Groq
-    Camera -->|Image Upload| API
-    
     Groq -->|Transcribed Text| API
-    API -->|Prompt & Tools| Agent
-    
+    Camera -->|Image Upload| API
+    UI -->|HTTP Requests| API
+
+    Anthropic["🤖 Anthropic API (Claude 3.5 Sonnet)"]:::ext
     Agent <-->|Requires Vision/Logic| Anthropic
-    Agent -->|Generates Response| EdgeTTS
+    
+    EdgeTTS["🗣️ Microsoft Edge TTS (External)"]:::ext
+    Agent -->|Generates Audio| EdgeTTS
     EdgeTTS -->|Audio Playback| Voice
     
-    Agent -->|Execute Banking Action| Auth
-    Auth --> Ops
-    Pay & Split & Link & Fetch -->|REST API Calls| BunqBank
+    BunqBank(["🏦 bunq Core Banking System (External)"]):::ext
+    
+    Pay -->|REST API| BunqBank
+    Split -->|REST API| BunqBank
+    Link -->|REST API| BunqBank
+    Fetch -->|REST API| BunqBank
     BunqBank -->|JSON Response| Ops
-    Ops -->|Data Formatting| Agent
 
     %% Subgraph Styling
     style Client fill:none,stroke:#8a8eac,stroke-width:2px,stroke-dasharray: 5 5,rx:10,ry:10
     style AWS fill:#221f2e,stroke:#4a4282,stroke-width:2px,rx:10,ry:10
-    style External fill:none,stroke:#4a4282,stroke-width:2px,stroke-dasharray: 5 5,rx:10,ry:10
     style AI_RAG fill:#2a1c30,stroke:#6b437a,stroke-width:1px,rx:8,ry:8
     style BunqHub fill:#111b3d,stroke:#3b82f6,stroke-width:1px,rx:8,ry:8
 ```

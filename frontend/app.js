@@ -850,9 +850,9 @@ document.querySelectorAll('.nav-pill').forEach(btn => {
 // ── Receipt / Camera ──────────────────────────────────────────
 
 const receiptInput = document.getElementById('receipt-input');
-const scanBtn      = document.getElementById('scan-receipt-btn');
+const attachBtn    = document.getElementById('attach-btn');
 
-scanBtn.addEventListener('click', () => {
+attachBtn.addEventListener('click', () => {
   widgetPanel.classList.add('open');
   receiptInput.click();
 });
@@ -860,76 +860,80 @@ scanBtn.addEventListener('click', () => {
 receiptInput.addEventListener('change', async () => {
   const file = receiptInput.files[0];
   if (!file) return;
-  receiptInput.value = '';   // reset so same file can be re-selected
+  receiptInput.value = '';
 
   const objectUrl = URL.createObjectURL(file);
 
-  // Show thumbnail + uploading state in chat
   const preview = document.createElement('div');
   preview.className = 'msg bot uploading';
   preview.innerHTML = `
-    <img src="${objectUrl}" class="receipt-thumb" alt="Receipt preview">
-    Analysing receipt...`;
+    <img src="${objectUrl}" class="receipt-thumb" alt="Document preview">
+    Reading document…`;
   messagesEl.appendChild(preview);
   messagesEl.scrollTop = messagesEl.scrollHeight;
 
   try {
-    // Read file as base64
-    const base64 = await fileToBase64(file);
-    const mediaType = file.type || 'image/jpeg';
+    // Resize client-side then upload as multipart (no base64 overhead)
+    const blob = await resizeImageBlob(file);
+    const fd = new FormData();
+    fd.append('file', blob, file.name || 'document.jpg');
 
-    const res = await fetch(`${API_BASE}/vision`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ image_base64: base64, media_type: mediaType }),
-    });
+    const res = await fetch(`${API_BASE}/upload-document`, { method: 'POST', body: fd });
 
     if (!res.ok) {
       const err = await res.json();
-      throw new Error(err.detail || 'Vision error');
+      throw new Error(err.detail || 'Upload error');
     }
 
     const data = await res.json();
     preview.remove();
     URL.revokeObjectURL(objectUrl);
 
-    // Build receipt card
+    // Build document card (works for receipts, bills, letters)
     const card = document.createElement('div');
     card.className = 'msg bot';
 
-    const confClass = data.confidence === 'low' ? 'receipt-confidence-low' : '';
-    const itemsHtml = data.items?.length
+    const confClass  = data.confidence === 'low' ? 'receipt-confidence-low' : '';
+    const amountStr  = data.amount != null ? `${data.currency} ${data.amount.toFixed(2)}` : '';
+    const dueDateRow = data.due_date ? `<div class="receipt-meta">Due: ${data.due_date}</div>` : '';
+    const dateRow    = data.date && !data.due_date ? `<div class="receipt-meta">${data.date}</div>` : '';
+    const refRow     = data.reference ? `<div class="receipt-meta">Ref: ${data.reference}</div>` : '';
+    const ibanRow    = data.iban ? `<div class="receipt-meta" style="font-size:11px">IBAN: ${data.iban}</div>` : '';
+    const itemsHtml  = data.items?.length
       ? `<div class="receipt-items">${data.items.join('<br>')}</div>`
       : '';
-    const dateHtml  = data.date ? ` · ${data.date}` : '';
+    const kindLabel  = data.doc_kind !== 'other' ? data.doc_kind : data.category;
 
     card.innerHTML = `
-      <img src="${URL.createObjectURL(file)}" class="receipt-thumb" alt="Receipt">
+      <img src="${URL.createObjectURL(file)}" class="receipt-thumb" alt="Document">
       <div class="receipt-card ${confClass}">
         <div class="receipt-card-header">
-          <div class="receipt-merchant">${data.merchant}</div>
-          <div class="receipt-amount">${data.currency} ${data.amount?.toFixed(2)}</div>
+          <div class="receipt-merchant">${data.vendor || 'Unknown'}</div>
+          <div class="receipt-amount">${amountStr}</div>
         </div>
-        <div class="receipt-meta">${data.payment_method}${dateHtml}</div>
-        <div class="receipt-category">${data.category}</div>
-        ${itemsHtml}
+        <div class="receipt-category">${kindLabel}</div>
+        ${dueDateRow}${dateRow}${refRow}${ibanRow}${itemsHtml}
       </div>
       <div style="font-size:12px;color:var(--text-muted);margin-top:4px">${data.summary}</div>`;
 
     messagesEl.appendChild(card);
     messagesEl.scrollTop = messagesEl.scrollHeight;
 
-    speak(`Receipt from ${data.merchant}. Total ${data.currency} ${data.amount?.toFixed(2)}. Category: ${data.category}.`);
+    speak(data.summary);
+
+    // Inject extracted data into Guide conversation
+    const context = `I just uploaded a document. Here's what was extracted: vendor=${data.vendor || 'unknown'}, amount=${amountStr || 'unknown'}${data.due_date ? ', due '+data.due_date : ''}${data.iban ? ', IBAN '+data.iban : ''}. ${data.summary} What should I do next?`;
+    setTimeout(() => sendMessage(context), 300);
 
   } catch (err) {
-    preview.textContent = `Could not analyse receipt: ${err.message}`;
+    preview.textContent = `Could not read document: ${err.message}`;
     preview.classList.remove('uploading');
   }
 });
 
-const MAX_FILE_MB  = 5;      // reject before reading
-const MAX_PX       = 1024;   // resize longest side to this
-const JPEG_QUALITY = 0.75;   // 75% quality — fine for receipts
+const MAX_FILE_MB  = 10;
+const MAX_PX       = 1536;   // enough resolution for OCR
+const JPEG_QUALITY = 0.82;
 
 // ── Missing Contact Options ───────────────────────────────────
 
@@ -969,10 +973,9 @@ function skipContact(name) {
   sendMessage(`Skip ${name}, proceed without them`);
 }
 
-function fileToBase64(file) {
-  // Hard reject oversized files immediately
+function resizeImageBlob(file) {
   if (file.size > MAX_FILE_MB * 1024 * 1024) {
-    return Promise.reject(new Error(`Image too large (max ${MAX_FILE_MB} MB). Please use a smaller photo.`));
+    return Promise.reject(new Error(`File too large (max ${MAX_FILE_MB} MB).`));
   }
 
   return new Promise((resolve, reject) => {
@@ -982,7 +985,6 @@ function fileToBase64(file) {
       const img = new Image();
       img.onerror = reject;
       img.onload = () => {
-        // Resize down if needed — keep aspect ratio
         let { width, height } = img;
         if (width > MAX_PX || height > MAX_PX) {
           if (width >= height) { height = Math.round(height * MAX_PX / width);  width = MAX_PX; }
@@ -994,9 +996,10 @@ function fileToBase64(file) {
         canvas.height = height;
         canvas.getContext('2d').drawImage(img, 0, 0, width, height);
 
-        // Always output JPEG for consistent compression
-        const dataUrl = canvas.toDataURL('image/jpeg', JPEG_QUALITY);
-        resolve(dataUrl.split(',')[1]);
+        canvas.toBlob(blob => {
+          if (blob) resolve(blob);
+          else reject(new Error('Canvas toBlob failed'));
+        }, 'image/jpeg', JPEG_QUALITY);
       };
       img.src = e.target.result;
     };

@@ -3,7 +3,7 @@ import os
 from pathlib import Path
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Request, Form
+from fastapi import FastAPI, HTTPException, Request, Form, File, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from itsdangerous import URLSafeSerializer, BadSignature
@@ -180,6 +180,28 @@ async def vision_endpoint(req: VisionRequest, request: Request):
     try:
         from handlers.vision import analyse_receipt
         return analyse_receipt(req.image_base64, req.media_type)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/upload-document")
+async def upload_document(request: Request, file: UploadFile = File(...)):
+    user = _get_session_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not logged in")
+
+    if not os.environ.get("ANTHROPIC_API_KEY"):
+        raise HTTPException(status_code=500, detail="ANTHROPIC_API_KEY not set")
+
+    content = await file.read()
+    if len(content) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="File too large. Max 10 MB.")
+
+    media_type = file.content_type or "image/jpeg"
+
+    try:
+        from handlers.vision import extract_document
+        return extract_document(content, media_type)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

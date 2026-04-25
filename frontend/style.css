@@ -639,6 +639,8 @@ body {
 .btn-icon.mic.recording { background: #FEE2E2; color: var(--negative); border-color: var(--negative); animation: record-pulse 1s infinite; }
 .btn-icon.send { background: var(--bunq-green); color: var(--bunq-navy); }
 .btn-icon.send:hover { background: var(--bunq-green-dark); }
+.btn-icon.attach { background: var(--surface); color: var(--text-secondary); border: 1.5px solid var(--border); }
+.btn-icon.attach:hover { border-color: var(--bunq-green); color: var(--bunq-green-dark); }
 
 @keyframes record-pulse {
   0%, 100% { transform: scale(1); }

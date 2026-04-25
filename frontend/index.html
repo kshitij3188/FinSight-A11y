@@ -66,17 +66,9 @@
         </div>
       </div>
 
-      <div class="quick-prompts" id="quick-prompts" aria-label="Quick questions">
-        <button class="quick-prompt" data-q="How do I send money?">Send money</button>
-        <button class="quick-prompt" data-q="What is my IBAN?">My IBAN</button>
-        <button class="quick-prompt" data-q="How do I freeze my card?">Freeze card</button>
-        <button class="quick-prompt" data-q="How do I add to my savings?">Add savings</button>
-        <button class="quick-prompt receipt-prompt" id="scan-receipt-btn">📷 Scan receipt</button>
-      </div>
-
       <!-- Hidden file input — accepts camera or file on mobile -->
-      <input type="file" id="receipt-input" accept="image/*" capture="environment"
-             style="display:none" aria-label="Upload receipt image">
+      <input type="file" id="receipt-input" accept="image/*"
+             style="display:none" aria-label="Upload document or photo">
 
       <div class="widget-messages" id="widget-messages" role="log" aria-live="polite" aria-label="Conversation">
         <div class="msg bot">
@@ -91,6 +83,7 @@
         </div>
         <div class="widget-input-row">
           <button class="btn-icon mic" id="mic-btn" aria-label="Toggle voice input" title="Tap to start, tap again to stop">🎤</button>
+          <button class="btn-icon attach" id="attach-btn" aria-label="Upload document or photo" title="Upload a receipt, bill, or document">📎</button>
           <input type="text" id="chat-input" placeholder="Ask me anything..." aria-label="Type your question" autocomplete="off">
           <button class="btn-icon send" id="send-btn" aria-label="Send message">→</button>
         </div>

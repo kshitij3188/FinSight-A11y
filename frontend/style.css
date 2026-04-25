@@ -509,13 +509,22 @@ body {
   background: var(--card);
   border-radius: 20px;
   box-shadow: var(--shadow-lg);
-  display: none;
+  display: flex;
   flex-direction: column;
   overflow: hidden;
   border: 1.5px solid var(--border);
   max-height: 520px;
+  opacity: 0;
+  pointer-events: none;
+  transform: scale(0.95) translateY(10px);
+  transform-origin: bottom right;
+  transition: opacity 0.2s ease, transform 0.2s ease;
 }
-.widget-panel.open { display: flex; }
+.widget-panel.open {
+  opacity: 1;
+  pointer-events: auto;
+  transform: scale(1) translateY(0);
+}
 
 .widget-header {
   background: var(--bunq-navy);
@@ -553,6 +562,11 @@ body {
   border-radius: 14px;
   font-size: 14px;
   line-height: 1.4;
+  animation: msg-in 0.22s ease-out;
+}
+@keyframes msg-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 .msg.bot {
   background: var(--surface);
@@ -637,8 +651,45 @@ body {
 .btn-icon.mic { background: var(--surface); color: var(--text-secondary); border: 1.5px solid var(--border); }
 .btn-icon.mic:hover { border-color: var(--bunq-green); color: var(--bunq-green-dark); }
 .btn-icon.mic.recording { background: #FEE2E2; color: var(--negative); border-color: var(--negative); animation: record-pulse 1s infinite; }
+.btn-icon.attach { background: var(--surface); color: var(--text-secondary); border: 1.5px solid var(--border); }
+.btn-icon.attach:hover { border-color: var(--bunq-green); color: var(--bunq-green); }
+.btn-icon.attach.has-file { border-color: var(--bunq-green); color: var(--bunq-green); background: rgba(0,207,180,0.08); }
 .btn-icon.send { background: var(--bunq-green); color: var(--bunq-navy); }
 .btn-icon.send:hover { background: var(--bunq-green-dark); }
+
+.attachment-preview {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 2px;
+}
+.attachment-preview[hidden] { display: none; }
+.attachment-thumb-small {
+  width: 36px; height: 36px;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1.5px solid var(--bunq-green);
+  flex-shrink: 0;
+}
+.attachment-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  flex: 1;
+}
+.attachment-remove-btn {
+  width: 18px; height: 18px;
+  background: var(--negative);
+  color: white;
+  border: none;
+  border-radius: 50%;
+  font-size: 12px;
+  line-height: 18px;
+  cursor: pointer;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
 
 @keyframes record-pulse {
   0%, 100% { transform: scale(1); }
@@ -651,6 +702,7 @@ body {
   flex-wrap: wrap;
   gap: 6px;
 }
+.quick-prompts[hidden] { display: none; }
 .quick-prompt {
   background: rgba(0,207,180,0.1);
   border: 1px solid rgba(0,207,180,0.3);
@@ -700,15 +752,21 @@ body {
   margin-bottom: 8px;
 }
 .receipt-items { font-size: 11px; color: var(--text-secondary); line-height: 1.6; }
-.receipt-thumb {
-  width: 100%;
-  max-height: 120px;
-  object-fit: cover;
-  border-radius: 8px;
-  margin-bottom: 8px;
-  border: 1px solid var(--border);
-}
 .receipt-confidence-low { border-color: #F59E0B; }
+
+.receipt-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.receipt-tbl-key {
+  color: var(--text-muted);
+  font-weight: 600;
+  padding: 4px 10px 4px 0;
+  width: 72px;
+  vertical-align: top;
+  white-space: nowrap;
+}
+.receipt-tbl-val {
+  color: var(--text-primary);
+  padding: 4px 0;
+}
 
 /* Contact not-found card */
 .contact-option-btn {

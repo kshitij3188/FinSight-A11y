@@ -98,6 +98,7 @@ class GuideRequest(BaseModel):
     query: str
     page_id: str = "home"
     page_state: dict = {}
+    history: list[dict] = []
 
 
 class VisionRequest(BaseModel):
@@ -155,7 +156,7 @@ async def guide_endpoint(req: GuideRequest, request: Request):
 
     try:
         from handlers.guide import guide
-        result = guide(req.query, req.page_id, PAGE_ELEMENTS[req.page_id], api_key=user["api_key"], page_state=req.page_state)
+        result = guide(req.query, req.page_id, PAGE_ELEMENTS[req.page_id], api_key=user["api_key"], page_state=req.page_state, history=req.history)
         return result
     except RuntimeError as e:
         raise HTTPException(status_code=503, detail=str(e))

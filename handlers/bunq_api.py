@@ -232,6 +232,44 @@ def create_payment_link(
     }
 
 
+def get_received_requests(api_key: str, count: int = 20) -> list[dict]:
+    client = _get_client(api_key)
+    accounts = get_accounts(api_key)
+    if not accounts:
+        return []
+    account_id = accounts[0]["id"]
+    items = client.get(
+        f"user/{client.user_id}/monetary-account/{account_id}/request-inquiry",
+        params={"count": str(count)},
+    )
+    result = []
+    for item in items:
+        r = item.get("RequestInquiry", {})
+        ca = r.get("counterparty_alias", {})
+        lma = ca.get("label_monetary_account", {})
+        requester = lma.get("display_name") or ca.get("display_name") or "Unknown"
+        amount = r.get("amount_inquired", {})
+        result.append({
+            "id":          r.get("id"),
+            "requester":   requester,
+            "amount":      float(amount.get("value", 0)),
+            "currency":    amount.get("currency", "EUR"),
+            "description": r.get("description") or "",
+            "status":      r.get("status", ""),
+            "created":     r.get("created", ""),
+        })
+    return result
+
+
+def register_push_filter(api_key: str) -> dict:
+    client = _get_client(api_key)
+    resp = client.post(
+        f"user/{client.user_id}/notification-filter-push",
+        {"notification_filters": [{"category": "MUTATION"}]},
+    )
+    return {"status": "registered", "filters": resp}
+
+
 def get_transactions(api_key: str, account_id: int, count: int = 10) -> list[dict]:
     client = _get_client(api_key)
     items = client.get(
@@ -243,17 +281,21 @@ def get_transactions(api_key: str, account_id: int, count: int = 10) -> list[dic
     for item in items:
         p = item.get("Payment", {})
         ca = p.get("counterparty_alias", {})
+        lma = ca.get("label_monetary_account", {})
         counterpart = (
-            ca.get("label_monetary_account", {}).get("display_name")
+            lma.get("display_name")
             or ca.get("display_name")
             or "Unknown"
         )
+        aliases = lma.get("alias", [])
+        iban = next((a["value"] for a in aliases if a.get("type") == "IBAN"), None)
         amount = p.get("amount", {})
         result.append({
             "id":          p.get("id"),
             "amount":      float(amount.get("value", 0)),
             "currency":    amount.get("currency", "EUR"),
             "counterpart": counterpart,
+            "iban":        iban,
             "description": p.get("description") or "",
             "created":     p.get("created", ""),
         })

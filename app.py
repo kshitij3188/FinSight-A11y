@@ -55,12 +55,13 @@ PAGE_ELEMENTS: dict[str, dict[str, str]] = {
         "nav-savings": "Savings tab in navigation bar",
     },
     "pay": {
-        "field-recipient": "Recipient field — enter name or IBAN of person to pay",
+        "field-recipient": "Recipient name field — enter the full name of the person to pay",
+        "field-iban": "IBAN field — enter the recipient's IBAN bank account number",
         "field-amount": "Amount field — enter how much money to send (in euros)",
         "field-description": "Description field — optional note for this payment",
         "btn-pay-confirm": "Confirm Payment button — tap to send the payment",
         "btn-pay-cancel": "Cancel button — tap to go back without paying",
-        "recent-contacts": "Recent contacts list — tap a name to fill recipient automatically",
+        "recent-contacts": "Recent contacts list — tap a contact to pre-fill their name and IBAN automatically",
     },
     "accounts": {
         "account-main-card": "Main current account card showing balance",
@@ -88,6 +89,13 @@ PAGE_ELEMENTS: dict[str, dict[str, str]] = {
         "massinterest-rate": "Interest rate display showing current bunq massinterest rate",
         "btn-set-goal": "Set New Goal button",
     },
+    "request": {
+        "field-req-from": "From field — enter name, IBAN, email, or phone of person to request from. Leave blank to generate a shareable payment link instead.",
+        "field-req-amount": "Amount field — how much to request (in euros)",
+        "field-req-desc": "Description field — what the request is for",
+        "btn-req-confirm": "Send Request button — sends a payment request to the person, or generates a shareable link if no person is specified",
+        "btn-req-cancel": "Cancel button — go back without requesting",
+    },
 }
 
 
@@ -109,6 +117,19 @@ class PaymentRequest(BaseModel):
     recipient: str
     amount: float
     description: str = "Payment via bunq Guide"
+    currency: str = "EUR"
+
+
+class RequestPersonRequest(BaseModel):
+    from_name: str
+    amount: float
+    description: str = "Payment request via bunq"
+    currency: str = "EUR"
+
+
+class PaymentLinkRequest(BaseModel):
+    amount: float
+    description: str = "Payment link via bunq"
     currency: str = "EUR"
 
 
@@ -217,6 +238,89 @@ async def pay_endpoint(req: PaymentRequest, request: Request):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.post("/notifications/register")
+async def register_notifications(request: Request):
+    user = _get_session_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not logged in")
+    try:
+        from handlers.bunq_api import register_push_filter
+        result = register_push_filter(user["api_key"])
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/request-person")
+async def request_person_endpoint(req: RequestPersonRequest, request: Request):
+    user = _get_session_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not logged in")
+    try:
+        from handlers.bunq_api import get_accounts, get_contacts, split_bill
+        accounts = get_accounts(user["api_key"])
+        if not accounts:
+            raise HTTPException(status_code=400, detail="No active account found")
+        account_id = accounts[0]["id"]
+
+        contacts = get_contacts(user["api_key"], account_id, search_names=[req.from_name])
+        found = contacts.get("found", [])
+        if not found:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Could not resolve '{req.from_name}' — provide an IBAN, email, or phone number.",
+            )
+
+        recipient = found[0]
+        recipient["amount"] = req.amount
+        result = split_bill(
+            api_key=user["api_key"],
+            account_id=account_id,
+            recipients=[recipient],
+            description=req.description,
+            currency=req.currency,
+        )
+        if result.get("errors"):
+            raise HTTPException(status_code=400, detail=result["errors"][0].get("error", "Request failed"))
+        sent = result["sent"][0]
+        return {
+            "request_id": sent["id"],
+            "amount": sent["amount"],
+            "currency": req.currency,
+            "recipient": recipient.get("display_name") or req.from_name,
+            "description": req.description,
+        }
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/payment-link")
+async def payment_link_endpoint(req: PaymentLinkRequest, request: Request):
+    user = _get_session_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not logged in")
+    try:
+        from handlers.bunq_api import get_accounts, create_payment_link
+        accounts = get_accounts(user["api_key"])
+        if not accounts:
+            raise HTTPException(status_code=400, detail="No active account found")
+        account_id = accounts[0]["id"]
+        result = create_payment_link(
+            api_key=user["api_key"],
+            account_id=account_id,
+            amount=req.amount,
+            description=req.description,
+            currency=req.currency,
+        )
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.post("/stt")
 async def stt_endpoint(request: Request, audio: UploadFile = File(...)):
     user = _get_session_user(request)
@@ -276,6 +380,18 @@ def api_accounts(request: Request):
         return {"accounts": [], "mock": True, "error": str(e)}
 
 
+@app.get("/api/requests-received")
+def api_requests_received(request: Request):
+    user = _get_session_user(request)
+    if not user:
+        return {"requests": [], "mock": True}
+    try:
+        from handlers.bunq_api import get_received_requests
+        return {"requests": get_received_requests(user["api_key"]), "mock": False}
+    except Exception as e:
+        return {"requests": [], "mock": True, "error": str(e)}
+
+
 @app.get("/api/transactions")
 def api_transactions(request: Request, account_id: int = 0, count: int = 10):
     user = _get_session_user(request)
@@ -286,6 +402,20 @@ def api_transactions(request: Request, account_id: int = 0, count: int = 10):
         return {"transactions": get_transactions(user["api_key"], account_id, count), "mock": False}
     except Exception as e:
         return {"transactions": [], "mock": True, "error": str(e)}
+
+
+@app.get("/api/debug/transaction")
+def api_debug_transaction(request: Request, account_id: int = 0):
+    user = _get_session_user(request)
+    if not user or account_id == 0:
+        raise HTTPException(status_code=400, detail="account_id required")
+    from handlers.bunq_api import _get_client
+    client = _get_client(user["api_key"])
+    items = client.get(
+        f"user/{client.user_id}/monetary-account/{account_id}/payment",
+        params={"count": "1"},
+    )
+    return items[0] if items else {}
 
 
 # ── Frontend ──────────────────────────────────────────────────

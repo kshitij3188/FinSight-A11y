@@ -22,15 +22,39 @@
 
 <div class="phone-frame">
 
+  <!-- Push notification banner -->
+  <div id="push-banner" class="push-banner" role="alert" aria-live="assertive" aria-atomic="true">
+    <div class="push-banner-icon" id="push-banner-icon"></div>
+    <div class="push-banner-body">
+      <div class="push-banner-title" id="push-banner-title"></div>
+      <div class="push-banner-msg" id="push-banner-msg"></div>
+    </div>
+    <button class="push-banner-close" id="push-banner-close" aria-label="Dismiss notification">
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+  </div>
+
   <!-- Top Navigation — direct child of frame, no sticky needed -->
   <nav class="top-nav" role="navigation" aria-label="Main navigation">
 
     <!-- Profile avatar + dropdown -->
     <div class="nav-corner-wrap" id="profile-wrap">
-      <button class="nav-avatar" id="nav-profile-btn" aria-label="Profile" aria-haspopup="true" aria-expanded="false">A</button>
-      <div class="nav-dropdown" id="profile-dropdown" hidden>
-        <button class="dropdown-item" disabled>Settings</button>
-        <a class="dropdown-item dropdown-signout" href="/auth/logout">Sign out</a>
+      <button class="nav-avatar" id="nav-profile-btn" aria-label="Profile" aria-haspopup="true" aria-expanded="false">
+        A
+        <span class="notif-badge" id="notif-badge" hidden></span>
+      </button>
+      <div class="nav-dropdown notif-dropdown" id="profile-dropdown" hidden>
+        <div class="notif-dropdown-header">
+          <span class="notif-dropdown-title">Notifications</span>
+          <button class="notif-clear-btn" id="notif-clear-btn" aria-label="Clear all notifications">Clear all</button>
+        </div>
+        <div id="notif-list" class="notif-list">
+          <div class="notif-empty">No notifications</div>
+        </div>
+        <div class="notif-dropdown-footer">
+          <button class="dropdown-item" disabled>Settings</button>
+          <a class="dropdown-item dropdown-signout" href="/auth/logout">Sign out</a>
+        </div>
       </div>
     </div>
 
@@ -68,8 +92,8 @@
         </div>
         <div class="dropdown-label" style="margin-top:10px">Speech</div>
         <div class="dropdown-group" role="group" aria-label="Speech output">
-          <button class="speech-btn active" id="btn-speech-on" aria-pressed="true">On</button>
-          <button class="speech-btn" id="btn-speech-off" aria-pressed="false">Off</button>
+          <button class="speech-btn" id="btn-speech-on" aria-pressed="false">On</button>
+          <button class="speech-btn active" id="btn-speech-off" aria-pressed="true">Off</button>
         </div>
         <div class="dropdown-label" style="margin-top:10px">Language</div>
         <div class="dropdown-group" role="group" aria-label="Language">
@@ -148,6 +172,13 @@
         </div>
       </div>
     </div>
+  </div>
+
+  <!-- Transaction detail bottom sheet -->
+  <div id="txn-sheet-backdrop" class="txn-sheet-backdrop" onclick="closeTxnDetail()" aria-hidden="true"></div>
+  <div id="txn-sheet" class="txn-sheet" role="dialog" aria-label="Transaction details" aria-modal="true">
+    <div class="txn-sheet-handle"></div>
+    <div class="txn-sheet-content" id="txn-sheet-content"></div>
   </div>
 
 </div><!-- /.phone-frame -->

@@ -16,19 +16,61 @@ const bunqState = {
   userName: null,
 };
 
+// Known test users — used for IBAN lookup on mock transactions
+const KNOWN_USERS = {
+  'Ayako Mercati':    { iban: 'NL69BUNQ2106218508', email: 'test+9a1a9a4a-c715-4f2c-ba30-22e32fac9ae7@bunq.com' },
+  'Corrin Hunt':      { iban: 'NL08BUNQ2106236581', email: 'test+5c456063-82f5-44ed-ab7e-f27b1d1c05eb@bunq.com' },
+  'Lydia York':       { iban: 'NL32BUNQ2106231105', email: 'test+561fd0f1-f300-4cd1-9581-9d9f9873e8aa@bunq.com' },
+  'Anne Hunt':        { iban: 'NL06BUNQ2106235550', email: 'test+04c80ed6-b442-4973-973b-11829af9dea3@bunq.com' },
+  'Ewoud Preece':     { iban: 'NL67BUNQ2106230184', email: 'test+36755822-e924-43c6-afa7-f4b3d8d5b4d0@bunq.com' },
+  'Frederieke Doyle': { iban: 'NL04BUNQ2106237138', email: 'test+747ab57d-38ab-42a8-970f-af3d87ea2c7c@bunq.com' },
+  'Nancee Taylor':    { iban: 'NL14BUNQ2106230168', email: 'test+4267ed32-596d-4f3a-910e-622711da0999@bunq.com' },
+  'Angela Finnegan':  { iban: 'NL87BUNQ2106241852', email: 'test+62e42ac3-0b0d-42ca-a678-42e06e2f704a@bunq.com' },
+  'Derick Taylor':    { iban: 'NL63BUNQ2106240538', email: 'test+759ee924-487a-47c6-9c78-7c305ef018e5@bunq.com' },
+  'Petros Darcy':     { iban: 'NL36BUNQ2106228414', email: 'test+78e8111a-2083-4885-bf8d-7b9220a97733@bunq.com' },
+};
+
+function _matchKnownUser(counterpart) {
+  if (!counterpart) return null;
+  const q = counterpart.trim().toLowerCase();
+  for (const [fullName, data] of Object.entries(KNOWN_USERS)) {
+    const fn = fullName.toLowerCase();
+    const [first, last] = fn.split(' ');
+    if (fn === q) return { fullName, ...data };
+    if (first === q) return { fullName, ...data };
+    if (last === q) return { fullName, ...data };
+    if (`${first[0]}. ${last}` === q) return { fullName, ...data };
+    if (`${first} ${last[0]}.` === q) return { fullName, ...data };
+    if (q.startsWith(first[0] + '.') && q.endsWith(last)) return { fullName, ...data };
+    if (fn.includes(q) || q.includes(first)) return { fullName, ...data };
+  }
+  return null;
+}
+
+function resolveIban(counterpart) {
+  return _matchKnownUser(counterpart)?.iban ?? null;
+}
+
+function resolveFullName(counterpart) {
+  return _matchKnownUser(counterpart)?.fullName ?? counterpart;
+}
+
 // Mock fallbacks used when bunq API not configured
 const MOCK = {
-  balance: '€1,247.50',
-  balanceLabel: 'One thousand two hundred forty seven euros fifty cents',
-  iban: 'NL12 BUNQ 0123 4567 89',
+  balance: '€245.09',
+  balanceLabel: 'Two hundred forty five euros nine cents',
+  iban: 'NL32BUNQ2106231105',
   bic: 'BUNQNL2A',
-  incomeThisMonth: '+€2,400 income this month',
+  incomeThisMonth: '+€500 income this month',
   transactions: [
-    { counterpart: 'Albert Heijn', amount: -23.40, currency: 'EUR', cat: 'groceries', icon: '🛒', created: 'Today, 14:23' },
-    { counterpart: 'Netflix',      amount: -12.99, currency: 'EUR', cat: 'entertainment', icon: '🎬', created: 'Yesterday' },
-    { counterpart: 'Thuisbezorgd', amount: -28.50, currency: 'EUR', cat: 'food', icon: '🍕', created: 'Yesterday' },
-    { counterpart: 'NS Reizen',    amount: -18.60, currency: 'EUR', cat: 'transport', icon: '🚆', created: 'Mon' },
-    { counterpart: 'Employer BV',  amount: 2400.00, currency: 'EUR', cat: 'income', icon: '💼', created: 'Mon' },
+    { counterpart: 'Corrin Hunt',      iban: 'NL08BUNQ2106236581', amount: -50.00,  currency: 'EUR', description: 'Dinner split',    cat: 'food',          icon: '🍕', created: 'Today, 19:00',    createdDisplay: 'Today, 19:00' },
+    { counterpart: 'Ewoud Preece',     iban: 'NL67BUNQ2106230184', amount: -120.00, currency: 'EUR', description: 'Rent share',      cat: 'payment',       icon: '💳', created: 'Yesterday, 10:00', createdDisplay: 'Yesterday, 10:00' },
+    { counterpart: 'Ayako Mercati',    iban: 'NL69BUNQ2106218508', amount: 75.00,   currency: 'EUR', description: 'Concert tickets', cat: 'income',        icon: '💼', created: 'Mon, 14:00',      createdDisplay: 'Mon, 14:00' },
+    { counterpart: 'Anne Hunt',        iban: 'NL06BUNQ2106235550', amount: -30.00,  currency: 'EUR', description: 'Coffee + lunch',  cat: 'food',          icon: '☕', created: 'Sun, 12:30',      createdDisplay: 'Sun, 12:30' },
+    { counterpart: 'Petros Darcy',     iban: 'NL36BUNQ2106228414', amount: 200.00,  currency: 'EUR', description: 'Freelance work',  cat: 'income',        icon: '💼', created: 'Sat, 09:00',      createdDisplay: 'Sat, 09:00' },
+    { counterpart: 'Nancee Taylor',    iban: 'NL14BUNQ2106230168', amount: -18.50,  currency: 'EUR', description: 'Book club',       cat: 'entertainment', icon: '🎬', created: 'Fri, 20:00',      createdDisplay: 'Fri, 20:00' },
+    { counterpart: 'Angela Finnegan',  iban: 'NL87BUNQ2106241852', amount: -45.00,  currency: 'EUR', description: 'Groceries run',   cat: 'groceries',     icon: '🛒', created: 'Thu, 16:00',      createdDisplay: 'Thu, 16:00' },
+    { counterpart: 'Frederieke Doyle', iban: 'NL04BUNQ2106237138', amount: 60.00,   currency: 'EUR', description: 'Gym fees',        cat: 'payment',       icon: '💳', created: 'Wed, 11:00',      createdDisplay: 'Wed, 11:00' },
   ],
 };
 
@@ -47,10 +89,14 @@ async function loadBunqData() {
       const txData = await txRes.json();
       if (!txData.mock) {
         bunqState.transactions = txData.transactions.map(tx => ({
-          counterpart: tx.counterpart,
+          counterpart: resolveFullName(tx.counterpart),
+          iban: tx.iban || resolveIban(tx.counterpart),
           amount: tx.amount,
           currency: tx.currency,
-          created: new Date(tx.created).toLocaleDateString('en-NL', { weekday: 'short', hour: '2-digit', minute: '2-digit' }),
+          description: tx.description || '',
+          id: tx.id,
+          created: tx.created,
+          createdDisplay: new Date(tx.created).toLocaleDateString('en-NL', { weekday: 'short', hour: '2-digit', minute: '2-digit' }),
           ...categorize(tx),
         }));
       }
@@ -111,7 +157,7 @@ let currentMode = 'default';
 let currentLang = 'en';
 let voiceMode   = false;   // user has voice mode ON (persists, gates TTS)
 let isListening = false;   // mic is currently open (transient)
-let ttsEnabled  = true;    // speech output on/off toggle
+let ttsEnabled  = false;   // speech output on/off toggle (off by default)
 
 // ── Page Renderers ────────────────────────────────────────────
 
@@ -233,12 +279,13 @@ function renderHome() {
     <div class="txn-scroll-container">
       <div class="section-header" style="margin-top:4px">Recent transactions</div>
       <div data-element-id="recent-transactions" role="list" aria-label="Recent transactions">
-        ${txns.map(tx => `
-          <div class="transaction-item" role="listitem" tabindex="0" aria-label="${tx.counterpart}, ${fmt(tx.amount, tx.currency)}">
+        ${txns.map((tx, i) => `
+          <div class="transaction-item" role="listitem" tabindex="0" aria-label="${tx.counterpart}${tx.iban ? ', IBAN ' + tx.iban : ''}, ${fmt(tx.amount, tx.currency)}" onclick="openTxnDetail(${i})">
             <div class="txn-icon ${tx.cat}">${tx.icon}</div>
             <div class="txn-details">
               <div class="txn-name">${tx.counterpart}</div>
-              <div class="txn-date">${tx.created}</div>
+              ${tx.iban ? `<div class="txn-iban">${tx.iban}</div>` : ''}
+              <div class="txn-date">${tx.createdDisplay || tx.created}</div>
             </div>
             <div class="txn-amount ${tx.amount < 0 ? 'negative' : 'positive'}">${fmt(tx.amount, tx.currency)}</div>
           </div>`).join('')}
@@ -246,30 +293,61 @@ function renderHome() {
     </div>`;
 }
 
+const _CONTACT_COLORS = ['#FF6B9D', '#4F46E5', '#10B981', '#F59E0B', '#0A84FF', '#BF5AF2', '#FF6B00'];
+
+function _recentContacts() {
+  const seen = new Set();
+  const contacts = [];
+  for (const tx of bunqState.transactions) {
+    const name = tx.counterpart;
+    if (!name || seen.has(name)) continue;
+    seen.add(name);
+    contacts.push({ name, iban: tx.iban || null });
+    if (contacts.length === 5) break;
+  }
+  if (contacts.length === 0) {
+    return [
+      { name: 'Sarah',    iban: null },
+      { name: 'Tom',      iban: null },
+      { name: 'Mum',      iban: null },
+      { name: 'Gym',      iban: null },
+    ];
+  }
+  return contacts;
+}
+
 function renderPay() {
+  const contacts = _recentContacts();
   return `
     <div class="section-header">Send Money</div>
 
     <div class="card">
       <div class="section-header" style="font-size:13px;color:var(--text-secondary);margin-top:0">Recent contacts</div>
       <div data-element-id="recent-contacts" class="recent-contacts" role="list" aria-label="Recent contacts">
-        ${[
-          ['Sarah', '#FF6B9D'],
-          ['Tom', '#4F46E5'],
-          ['Mum', '#10B981'],
-          ['Gym', '#F59E0B'],
-        ].map(([name, color]) => `
-          <div class="contact-chip" role="listitem" tabindex="0" aria-label="Pay ${name}">
-            <div class="contact-avatar" style="background:${color}">${name[0]}</div>
-            <div class="contact-name">${name}</div>
-          </div>`).join('')}
+        ${contacts.map(({ name, iban }, i) => {
+          const safeName = name.replace(/'/g, "\\'");
+          const safeIban = (iban || '').replace(/'/g, "\\'");
+          const ibanDisplay = iban ? `<div class="contact-iban">${iban}</div>` : '';
+          return `
+          <div class="contact-chip" role="listitem" tabindex="0" aria-label="Pay ${name}${iban ? ', IBAN ' + iban : ''}" onclick="prefillRecipient('${safeName}', '${safeIban}')">
+            <div class="contact-avatar" style="background:${_CONTACT_COLORS[i % _CONTACT_COLORS.length]}">${name[0].toUpperCase()}</div>
+            <div class="contact-info">
+              <div class="contact-name">${name}</div>
+              ${ibanDisplay}
+            </div>
+          </div>`;
+        }).join('')}
       </div>
     </div>
 
     <div class="card pay-form">
       <div data-element-id="field-recipient" class="form-group">
-        <label for="input-recipient">Recipient name or IBAN</label>
-        <input type="text" id="input-recipient" placeholder="e.g. Sarah or NL12 BUNQ..." aria-label="Recipient name or IBAN">
+        <label for="input-recipient">Recipient name</label>
+        <input type="text" id="input-recipient" placeholder="e.g. Sarah Johnson" aria-label="Recipient full name">
+      </div>
+      <div data-element-id="field-iban" class="form-group">
+        <label for="input-iban">IBAN</label>
+        <input type="text" id="input-iban" placeholder="e.g. NL12 BUNQ 0123 4567 89" aria-label="Recipient IBAN" style="font-family:'SF Mono',monospace;letter-spacing:0.5px">
       </div>
       <div data-element-id="field-amount" class="form-group">
         <label for="input-amount">Amount</label>
@@ -291,13 +369,26 @@ function renderPay() {
     </div>`;
 }
 
+window.prefillRecipient = function prefillRecipient(name, iban) {
+  const nameInput = document.getElementById('input-recipient');
+  const ibanInput = document.getElementById('input-iban');
+  if (nameInput) nameInput.value = name;
+  if (ibanInput) ibanInput.value = iban || '';
+  const highlightIds = iban ? ['field-recipient', 'field-iban'] : ['field-recipient'];
+  const steps = iban
+    ? [`Recipient set to ${name}`, `IBAN set to ${iban} — tap Amount next`]
+    : [`Recipient set to ${name} — enter their IBAN or tap Amount`];
+  highlightElements(highlightIds, null, steps);
+};
+
 function renderRequest() {
   return `
     <div class="section-header">Request Money</div>
     <div class="card pay-form">
       <div data-element-id="field-req-from" class="form-group">
-        <label for="input-req-from">From (name or IBAN)</label>
-        <input type="text" id="input-req-from" placeholder="e.g. John or NL12 BUNQ..." aria-label="Request from name or IBAN">
+        <label for="input-req-from">From <span style="color:var(--text-muted)">(optional)</span></label>
+        <input type="text" id="input-req-from" placeholder="Name, IBAN, email, or phone…" aria-label="Request from person (optional)">
+        <div class="field-hint">Leave blank to generate a shareable payment link</div>
       </div>
       <div data-element-id="field-req-amount" class="form-group">
         <label for="input-req-amount">Amount</label>
@@ -310,13 +401,91 @@ function renderRequest() {
         <label for="input-req-desc">Description <span style="color:var(--text-muted)">(optional)</span></label>
         <input type="text" id="input-req-desc" placeholder="What's it for?" aria-label="Request description">
       </div>
-      <button data-element-id="btn-req-confirm" class="btn-primary" aria-label="Send payment request">
+      <button data-element-id="btn-req-confirm" class="btn-primary" onclick="submitRequest()" aria-label="Send payment request or generate link">
         Send Request
       </button>
       <button data-element-id="btn-req-cancel" class="btn-secondary" onclick="navigateTo('home')" aria-label="Cancel and go back">
         Cancel
       </button>
     </div>`;
+}
+
+async function submitRequest() {
+  const fromVal = document.getElementById('input-req-from')?.value?.trim();
+  const amount  = parseFloat(document.getElementById('input-req-amount')?.value);
+  const desc    = document.getElementById('input-req-desc')?.value?.trim() || 'Payment request via bunq';
+
+  if (!amount || amount <= 0) { alert('Please enter a valid amount.'); return; }
+
+  const btn = document.querySelector('[data-element-id="btn-req-confirm"]');
+  if (btn) { btn.disabled = true; btn.textContent = fromVal ? 'Sending…' : 'Generating link…'; }
+
+  try {
+    if (fromVal) {
+      // — person-to-person request via split_bill
+      const resp = await fetch('/request-person', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ from_name: fromVal, amount, description: desc }),
+      });
+      if (!resp.ok) { const e = await resp.json(); throw new Error(e.detail || 'Request failed'); }
+      const data = await resp.json();
+
+      triggerConfetti();
+      const msg = `Payment request of €${parseFloat(data.amount).toFixed(2)} sent to ${data.recipient}! They'll get a notification. 🎉`;
+      speak(msg); addMessage(msg, 'bot'); openWidget();
+      setTimeout(() => navigateTo('home'), 1800);
+
+    } else {
+      // — shareable bunq.me link
+      const resp = await fetch('/payment-link', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amount, description: desc }),
+      });
+      if (!resp.ok) { const e = await resp.json(); throw new Error(e.detail || 'Link creation failed'); }
+      const data = await resp.json();
+
+      _showPaymentLink(data.url, amount, desc);
+      const msg = `Payment link for €${parseFloat(amount).toFixed(2)} created! Share it with anyone. 🔗`;
+      speak(msg); addMessage(msg, 'bot'); openWidget();
+    }
+
+  } catch (e) {
+    alert(`Failed: ${e.message}`);
+    if (btn) { btn.disabled = false; btn.textContent = 'Send Request'; }
+  }
+}
+
+function _showPaymentLink(url, amount, desc) {
+  const content = document.getElementById('page-content');
+  if (!content) return;
+  content.innerHTML = `
+    <div class="section-header">Payment Link Created</div>
+    <div class="card pay-form" style="gap:16px">
+      <div style="text-align:center;padding:12px 0">
+        <div style="font-size:36px;margin-bottom:8px">🔗</div>
+        <div style="font-size:15px;font-weight:600;color:var(--text-primary)">€${parseFloat(amount).toFixed(2)} — ${desc}</div>
+        <div style="font-size:12px;color:var(--text-muted);margin-top:4px">Anyone with this link can pay you</div>
+      </div>
+      <div class="payment-link-box" id="payment-link-url" role="textbox" aria-label="Payment link URL" aria-readonly="true">${url}</div>
+      <button class="btn-primary" id="btn-copy-link" onclick="copyPaymentLink('${url}')" aria-label="Copy payment link">
+        Copy Link
+      </button>
+      <button class="btn-secondary" onclick="navigateTo('home')" aria-label="Go back to home">
+        Done
+      </button>
+    </div>`;
+}
+
+function copyPaymentLink(url) {
+  navigator.clipboard.writeText(url).then(() => {
+    const btn = document.getElementById('btn-copy-link');
+    if (btn) { btn.textContent = 'Copied!'; setTimeout(() => { btn.textContent = 'Copy Link'; }, 2000); }
+  }).catch(() => {
+    const box = document.getElementById('payment-link-url');
+    if (box) { const sel = window.getSelection(); const range = document.createRange(); range.selectNodeContents(box); sel.removeAllRanges(); sel.addRange(range); }
+  });
 }
 
 function renderAccounts() {
@@ -498,7 +667,7 @@ function navigateTo(pageId) {
 const ELEMENT_PAGE = {
   'balance-card': 'home', 'btn-send-money': 'home', 'btn-request': 'home',
   'btn-topup': 'home', 'recent-transactions': 'home',
-  'field-recipient': 'pay', 'field-amount': 'pay', 'field-description': 'pay',
+  'field-recipient': 'pay', 'field-iban': 'pay', 'field-amount': 'pay', 'field-description': 'pay',
   'btn-pay-confirm': 'pay', 'btn-pay-cancel': 'pay', 'recent-contacts': 'pay',
   'account-main-card': 'accounts', 'account-iban': 'accounts', 'account-bic': 'accounts',
   'btn-copy-iban': 'accounts', 'btn-new-account': 'accounts', 'account-savings-card': 'accounts',
@@ -508,6 +677,8 @@ const ELEMENT_PAGE = {
   'savings-pot': 'savings', 'savings-progress-bar': 'savings', 'savings-goal-amount': 'savings',
   'btn-add-savings': 'savings', 'btn-auto-save': 'savings', 'massinterest-rate': 'savings',
   'btn-set-goal': 'savings',
+  'field-req-from': 'request', 'field-req-amount': 'request', 'field-req-desc': 'request',
+  'btn-req-confirm': 'request', 'btn-req-cancel': 'request',
 };
 
 const Orchestrator = {
@@ -918,6 +1089,8 @@ async function sendMessage(query) {
       navigateTo(data.navigate_to);
     }
 
+    const hasHighlight = data.highlight_elements?.length > 0;
+
     // Highlight elements — orchestrator navigates to correct page per step
     setTimeout(() => {
       highlightElements(data.highlight_elements || [], data.response, data.steps || []);
@@ -928,9 +1101,9 @@ async function sendMessage(query) {
       setTimeout(() => executeActions(data.actions), 500);
     }
 
-    // Always speak response; stop mic first to prevent feedback loop
-    if (data.speak !== false) {
-      const ttsText = data.response + (data.steps?.length ? '. ' + data.steps.join('. ') : '');
+    // When highlight active, orchestrator speaks each step — skip chatbot reply to avoid overlap
+    if (data.speak !== false && !hasHighlight) {
+      const ttsText = data.response;
       if (isListening) {
         stopVoiceCapture();
         setTimeout(() => speak(ttsText), 250);
@@ -1186,11 +1359,13 @@ document.getElementById('btn-speech-off').addEventListener('click', () => {
 // ── Payment submission ────────────────────────────────────────
 
 async function submitPayment() {
-  const recipient = document.getElementById('input-recipient')?.value?.trim();
+  const name      = document.getElementById('input-recipient')?.value?.trim();
+  const iban      = document.getElementById('input-iban')?.value?.trim();
+  const recipient = iban || name;
   const amount    = parseFloat(document.getElementById('input-amount')?.value);
   const desc      = document.getElementById('input-desc')?.value?.trim() || 'Payment via bunq Guide';
 
-  if (!recipient) { alert('Please enter a recipient.'); return; }
+  if (!name && !iban) { alert('Please enter a recipient name or IBAN.'); return; }
   if (!amount || amount <= 0) { alert('Please enter a valid amount.'); return; }
 
   const btn = document.querySelector('[data-element-id="btn-pay-confirm"]');
@@ -1250,6 +1425,209 @@ function triggerConfetti() {
     `;
     container.appendChild(el);
     el.addEventListener('animationend', () => el.remove());
+  }
+}
+
+// ── Transaction detail sheet ──────────────────────────────────
+
+function openTxnDetail(index) {
+  const txns = bunqState.transactions.length ? bunqState.transactions : MOCK.transactions;
+  const tx = txns[index];
+  if (!tx) return;
+
+  const isIncoming = tx.amount >= 0;
+  const fullDate = tx.created
+    ? new Date(tx.created).toLocaleString('en-NL', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+    : (tx.createdDisplay || '—');
+
+  const rows = [
+    ['Counterpart',  tx.counterpart || '—'],
+    ['IBAN',         tx.iban        || '—'],
+    ['Amount',       `${isIncoming ? '+' : ''}${fmt(tx.amount, tx.currency)}`],
+    ['Direction',    isIncoming ? 'Incoming' : 'Outgoing'],
+    ['Description',  tx.description || '—'],
+    ['Category',     tx.cat         || '—'],
+    ['Date',         fullDate],
+    ['Payment ID',   tx.id          || '—'],
+  ];
+
+  document.getElementById('txn-sheet-content').innerHTML = `
+    <div class="txn-detail-header">
+      <div class="txn-detail-icon ${tx.cat}">${tx.icon || '💳'}</div>
+      <div class="txn-detail-amount ${isIncoming ? 'positive' : 'negative'}">${isIncoming ? '+' : ''}${fmt(tx.amount, tx.currency)}</div>
+      <div class="txn-detail-name">${tx.counterpart}</div>
+    </div>
+    <div class="txn-detail-rows">
+      ${rows.map(([label, value]) => `
+        <div class="txn-detail-row">
+          <div class="txn-detail-label">${label}</div>
+          <div class="txn-detail-value ${label === 'IBAN' ? 'mono' : ''}">${value}</div>
+        </div>`).join('')}
+    </div>
+    ${tx.iban ? `
+    <button class="btn-primary" style="margin-top:16px" onclick="prefillRecipient('${tx.counterpart.replace(/'/g, "\\'")}', '${tx.iban}'); closeTxnDetail(); navigateTo('pay');">
+      Send Money to ${tx.counterpart.split(' ')[0]}
+    </button>` : ''}
+    <button class="btn-secondary" style="margin-top:8px" onclick="closeTxnDetail()">Close</button>
+  `;
+
+  document.getElementById('txn-sheet-backdrop').classList.add('visible');
+  document.getElementById('txn-sheet').classList.add('visible');
+}
+
+function closeTxnDetail() {
+  document.getElementById('txn-sheet-backdrop').classList.remove('visible');
+  document.getElementById('txn-sheet').classList.remove('visible');
+}
+
+// ── Notification centre ───────────────────────────────────────
+
+const _notifCentre = [];  // { icon, title, msg, time, action? }
+
+function _notifTimeAgo(isoStr) {
+  if (!isoStr) return '';
+  const diff = Date.now() - new Date(isoStr).getTime();
+  const m = Math.floor(diff / 60000);
+  if (m < 1)  return 'Just now';
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  return `${Math.floor(h / 24)}d ago`;
+}
+
+function _renderNotifList() {
+  const list = document.getElementById('notif-list');
+  const badge = document.getElementById('notif-badge');
+  if (!list) return;
+  if (!_notifCentre.length) {
+    list.innerHTML = '<div class="notif-empty">No notifications</div>';
+    if (badge) badge.hidden = true;
+    return;
+  }
+  list.innerHTML = _notifCentre.map((n, i) => `
+    <div class="notif-item" data-idx="${i}">
+      <div class="notif-item-icon">${n.icon}</div>
+      <div class="notif-item-body">
+        <div class="notif-item-title">${n.title}</div>
+        <div class="notif-item-msg">${n.msg}</div>
+        ${n.time ? `<div class="notif-item-time">${n.time}</div>` : ''}
+        ${n.action ? `<button class="notif-item-action" onclick="${n.action}">Pay back</button>` : ''}
+      </div>
+    </div>`).join('');
+  if (badge) badge.hidden = false;
+}
+
+function addNotification(icon, title, msg, time = '', action = '') {
+  _notifCentre.unshift({ icon, title, msg, time, action });
+  _renderNotifList();
+}
+
+async function loadReceivedRequests() {
+  try {
+    const res = await fetch('/api/requests-received');
+    const data = await res.json();
+    if (data.mock || !data.requests?.length) return;
+    for (const r of data.requests) {
+      if (r.status !== 'PENDING') continue;
+      const name = resolveFullName(r.requester);
+      const iban = resolveIban(r.requester);
+      const amt  = `€${parseFloat(r.amount).toFixed(2)}`;
+      const desc = r.description ? ` — "${r.description}"` : '';
+      const time = _notifTimeAgo(r.created);
+      const action = iban
+        ? `prefillRecipient('${name.replace(/'/g,"\\'")}','${iban}');navigateTo('pay');document.getElementById('profile-dropdown').hidden=true;`
+        : `navigateTo('pay');document.getElementById('profile-dropdown').hidden=true;`;
+      addNotification('💸', `${name} requested ${amt}`, `Payment request${desc}`, time, action);
+    }
+  } catch (e) {
+    console.warn('loadReceivedRequests failed:', e);
+  }
+}
+
+// ── Push notification banner ──────────────────────────────────
+
+const PUSH_NOTIFICATIONS = {
+  salary: {
+    icon: '💰',
+    iconClass: 'salary',
+    title: 'Salary Day! 🎉',
+    message: "Your salary is hitting your account today — you've earned it!",
+    confetti: true,
+    duration: 7000,
+  },
+  rent: {
+    icon: '🏠',
+    iconClass: 'rent',
+    title: 'Rent Due Today',
+    message: "Heads up — it's the 25th and your rent is due. Make sure your balance is covered!",
+    confetti: false,
+    duration: 8000,
+  },
+};
+
+const _notifQueue = [];
+let _notifActive = false;
+let _notifTimer = null;
+
+function checkDateNotifications() {
+  const now = new Date();
+  const day = now.getDate();
+  const month = now.getMonth() + 1;
+  const params = new URLSearchParams(window.location.search);
+  const isPayday = params.has('testPayday') || (day === 25 && month === 4);
+  const isRentDay = params.has('testRent') || day === 25;
+
+  if (isPayday) _notifQueue.push('salary');
+  if (isRentDay) _notifQueue.push('rent');
+  if (_notifQueue.length) setTimeout(_showNextNotif, 1400);
+}
+
+function _showNextNotif() {
+  if (!_notifQueue.length) { _notifActive = false; return; }
+  _notifActive = true;
+  const type = _notifQueue.shift();
+  const notif = PUSH_NOTIFICATIONS[type];
+  if (!notif) { _showNextNotif(); return; }
+
+  const banner = document.getElementById('push-banner');
+  if (!banner) return;
+
+  const iconEl = document.getElementById('push-banner-icon');
+  iconEl.textContent = notif.icon;
+  iconEl.className = `push-banner-icon ${notif.iconClass}`;
+  document.getElementById('push-banner-title').textContent = notif.title;
+  document.getElementById('push-banner-msg').textContent = notif.message;
+
+  const oldBar = banner.querySelector('.push-banner-progress');
+  if (oldBar) oldBar.remove();
+  const bar = document.createElement('div');
+  bar.className = `push-banner-progress ${notif.iconClass}`;
+  bar.style.animationDuration = `${notif.duration}ms`;
+  banner.appendChild(bar);
+
+  banner.classList.add('visible');
+  if (notif.confetti) triggerConfetti();
+  addNotification(notif.icon, notif.title, notif.message, 'Just now');
+
+  clearTimeout(_notifTimer);
+  _notifTimer = setTimeout(dismissBanner, notif.duration);
+}
+
+function dismissBanner() {
+  clearTimeout(_notifTimer);
+  const banner = document.getElementById('push-banner');
+  if (banner) banner.classList.remove('visible');
+  setTimeout(() => {
+    if (_notifQueue.length) _showNextNotif();
+    else _notifActive = false;
+  }, 500);
+}
+
+async function registerPushFilter() {
+  try {
+    await fetch('/notifications/register', { method: 'POST' });
+  } catch (e) {
+    console.warn('Push filter registration failed:', e);
   }
 }
 
@@ -1501,8 +1879,10 @@ async function init() {
     bunqState.userName = user.name;
     const avatar = document.querySelector('.nav-avatar');
     if (avatar) {
+      const badge = document.getElementById('notif-badge');
       avatar.textContent = user.name.charAt(0);
       avatar.title = user.name;
+      if (badge) avatar.appendChild(badge);
     }
   } catch (e) {
     window.location.href = '/login';
@@ -1547,8 +1927,19 @@ async function init() {
     a11yBtn.setAttribute('aria-expanded', false);
   });
 
+  const bannerClose = document.getElementById('push-banner-close');
+  if (bannerClose) bannerClose.addEventListener('click', dismissBanner);
+
+  document.getElementById('notif-clear-btn')?.addEventListener('click', () => {
+    _notifCentre.length = 0;
+    _renderNotifList();
+  });
+
   navigateTo('home');
   loadBunqData();
+  registerPushFilter();
+  checkDateNotifications();
+  loadReceivedRequests();
 }
 
 // Redirect to login on any 401 — return never-resolving promise so caller never runs (H2)

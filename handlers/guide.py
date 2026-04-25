@@ -3,13 +3,11 @@ import os
 from typing import Literal
 
 import anthropic
-from langsmith import traceable
-from langsmith.wrappers import wrap_anthropic
 from pydantic import BaseModel
 
 from rag.pipeline import retrieve
 
-client = wrap_anthropic(anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", "")))
+client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
 
 
 class UIAction(BaseModel):
@@ -238,7 +236,6 @@ TOOLS = [
 _FALLBACK = GuideResponse(response="Something went wrong. Please try again.")
 
 
-@traceable(run_type="tool", name="execute_tool", metadata={"component": "guide"})
 def _execute_tool(name: str, inputs: dict, api_key: str | None = None) -> str:
     try:
         if name == "search_docs":
@@ -299,7 +296,6 @@ def _execute_tool(name: str, inputs: dict, api_key: str | None = None) -> str:
     return json.dumps({"error": f"unknown tool: {name}"})
 
 
-@traceable(run_type="chain", name="guide_handler", metadata={"model": "claude-sonnet-4-6", "component": "guide"})
 def guide(query: str, page_id: str, page_elements: dict, api_key: str | None = None, page_state: dict | None = None, history: list[dict] | None = None) -> dict:
     elements_str = "\n".join(f"  {k}: {v}" for k, v in page_elements.items())
 

@@ -60,27 +60,32 @@
         classDef split fill:#2e1065,stroke:#8b5cf6,stroke-width:2px,color:#fff,rx:15px,ry:15px
         classDef link fill:#052e16,stroke:#22c55e,stroke-width:2px,color:#fff,rx:15px,ry:15px
         classDef txn fill:#18181b,stroke:#a1a1aa,stroke-width:2px,color:#fff,rx:15px,ry:15px
+        classDef api fill:#4a4282,stroke:#8a8eac,stroke-width:2px,color:#fff,rx:4px,ry:4px
 
         %% Architecture Nodes
         User(["Start point<br>(Bank App User)"]):::startEnd
 
-        subgraph AWS ["AWS EC2 Instance Hosting"]
-        UI["Page / Process<br>(Dashboard)"]:::process
-        Scanner[/"Input/Output<br>(Receipt Scanner)"/]:::io
+        subgraph AWS ["AWS EC2 Instance Hosting (FastAPI)"]
+        UI["Page / Process<br>(Dashboard GUI)"]:::process
+        VoiceInput[/"Input<br>(Microphone Audio)"/]:::io
+        VoiceOutput[/"Output<br>(Audio Response)"/]:::io
+        Scanner[/"Input/Output<br>(Receipt Scanner Image)"/]:::io
 
-        AI_Agent{"Decision<br>(Banking Action?)"}:::decision
+        STT["Speech-to-Text<br>(Groq Whisper API)"]:::api
+        TTS["Text-to-Speech<br>(Edge TTS)"]:::api
 
-        YesAction["Yes"]:::yesNode
-        NoAction["No"]:::noNode
+        AI_Agent{"Decision<br>(Banking Action or Query?)"}:::decision
 
-        %% Action Path
-        SendMoney(["Action<br>Send €10 to Sara"]):::send
-        SplitBill(["Action<br>Split €60 with Tom & Mia"]):::split
-        PayLink(["Action<br>Payment link for €25"]):::link
-
-        %% Query / Information Path
-        GetIBAN(["Query<br>What is my IBAN?"]):::iban
-        GetTxn(["Query<br>Last transactions"]):::txn
+        %% Bunq Client Hub (Central Focus)
+        subgraph BunqClientHub ["Bunq API Client Hub"]
+        BunqAuth["Auth & Session Manager"]:::process
+        BunqOps{"Execute API Operation"}:::decision
+        OpPayment["Action<br>make_payment"]:::send
+        OpSplit["Action<br>split_bill"]:::split
+        OpLink["Action<br>create_payment_link"]:::link
+        OpAccounts["Query<br>get_accounts / contacts"]:::iban
+        OpTxns["Query<br>get_transactions"]:::txn
+        end
 
         %% Extended RAG Pipeline
         EmbeddingModel["Page / Process<br>(BAAI/bge-base Embeddings)"]:::process
@@ -88,47 +93,57 @@
         Caveman[/"Input/Output<br>(Caveman Token Optimizer)"/]:::io
         end
 
-        Anthropic["Validations<br>(Anthropic Brain)"]:::dashed
+        Anthropic["LLM Agent Brain<br>(Anthropic API)"]:::dashed
         BunqBank(["End point<br>(bunq Core System)"]):::success
 
         %% Flow
         User --> UI
-        UI --> AI_Agent
-
         User --> Scanner
+        User --> VoiceInput
+        
+        UI --> AI_Agent
         Scanner --> AI_Agent
+        VoiceInput --> STT
+        STT -->|"Text Prompt"| AI_Agent
 
-        %% Action Decision (Yes)
-        AI_Agent --- YesAction
-        YesAction --> SendMoney
-        YesAction --> SplitBill
-        YesAction --> PayLink
+        %% External AI Interactions
+        AI_Agent -.->|"Requires Intent / RAG Validation"| Anthropic
+        Anthropic -.->|"Intent Decoded"| AI_Agent
 
-        %% Query Decision (No)
-        AI_Agent --- NoAction
-        NoAction --> GetIBAN
-        NoAction --> GetTxn
-        NoAction --> EmbeddingModel
+        %% Decisions
+        AI_Agent -->|"Is action or bank query?"| BunqAuth
+        AI_Agent -->|"Is guide/help query?"| EmbeddingModel
 
-        %% RAG & Token Reduction Pipeline
+        %% RAG Flow
         EmbeddingModel -->|"Vector Search"| ChromaDB
         ChromaDB --> Caveman
-
-        %% External AI
-        AI_Agent -.-> Anthropic
-        Anthropic -.-> AI_Agent
-
-        %% Execution & Data Return
-        SendMoney --> BunqBank
-        SplitBill --> BunqBank
-        PayLink --> BunqBank
-        GetIBAN --> BunqBank
-        GetTxn --> BunqBank
-
         Caveman -.->|"Return optimized context"| AI_Agent
+        
+        %% TTS Flow
+        AI_Agent -->|"Generate Response"| TTS
+        TTS --> VoiceOutput
+        VoiceOutput --> User
+
+        %% Bunq Operations Flow
+        BunqAuth --> BunqOps
+        BunqOps -->|"Send Money"| OpPayment
+        BunqOps -->|"Split Bill"| OpSplit
+        BunqOps -->|"Pay Link"| OpLink
+        BunqOps -->|"Fetch Info"| OpAccounts
+        BunqOps -->|"Fetch History"| OpTxns
+
+        OpPayment --> BunqBank
+        OpSplit --> BunqBank
+        OpLink --> BunqBank
+        OpAccounts --> BunqBank
+        OpTxns --> BunqBank
+
+        BunqBank -->|"Return Data"| BunqOps
+        BunqOps -.->|"Confirm to User"| AI_Agent
 
         %% Style Subgraph
         style AWS fill:none,stroke:#4a4282,stroke-width:2px,stroke-dasharray: 5 5,color:#fff
+        style BunqClientHub fill:#2a2538,stroke:#8b5cf6,stroke-width:2px,rx:8px,ry:8px,color:#fff
     </div>
 
     <script>
